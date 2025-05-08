@@ -12,7 +12,7 @@ import (
     "strconv"
     "time"
 
-    "karpenter-provider-azure/pkg/resolver"
+    "github.com/Azure/karpenter-provider-azure/pkg/resolver"
 )
 
 func main() {
