@@ -2,7 +2,7 @@ package resolver_test
 
 import (
     "testing"
-    "karpenter-provider-azure/pkg/resolver"
+    "github.com/Azure/karpenter-provider-azure/pkg/resolver"
 )
 
 
