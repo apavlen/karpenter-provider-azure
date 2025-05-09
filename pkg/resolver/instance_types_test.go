@@ -65,3 +65,26 @@ func TestSelectBestInstance_MemoryOptimized(t *testing.T) {
 		t.Errorf("Expected mem1 for Memory-optimized, got %v", best.Name)
 	}
 }
+func TestBinPackWorkloads(t *testing.T) {
+	candidates := []AzureInstanceSpec{
+		{Name: "small", VCpus: 4, MemoryGiB: 16, PricePerHour: 0.1},
+		{Name: "large", VCpus: 8, MemoryGiB: 32, PricePerHour: 0.2},
+	}
+	workloads := WorkloadSet{
+		{CPURequirements: 2, MemoryRequirements: 8},
+		{CPURequirements: 2, MemoryRequirements: 8},
+		{CPURequirements: 4, MemoryRequirements: 16},
+		{CPURequirements: 1, MemoryRequirements: 4},
+	}
+	result := BinPackWorkloads(workloads, candidates, StrategyGeneralPurpose)
+	if len(result.VMs) == 0 {
+		t.Fatalf("Expected at least one VM in packing result")
+	}
+	totalPacked := 0
+	for _, vm := range result.VMs {
+		totalPacked += len(vm.Workloads)
+	}
+	if totalPacked != len(workloads) {
+		t.Errorf("Expected all workloads to be packed, got %d/%d", totalPacked, len(workloads))
+	}
+}

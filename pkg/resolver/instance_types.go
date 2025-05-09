@@ -1,6 +1,8 @@
 package resolver
 
-import "strings"
+import (
+	"strings"
+)
 
 // AzureInstanceSpec describes an Azure VM type and its capabilities.
 type AzureInstanceSpec struct {
@@ -18,9 +20,10 @@ type AzureInstanceSpec struct {
 	NestedVirtualization   bool
 	SpotSupported          bool
 	ConfidentialComputing  bool
+	// Add more fields as needed for filtering (e.g., AcceleratedNetworking, MaxPods, etc.)
 }
 
-// WorkloadProfile describes the requirements for a workload.
+// WorkloadProfile describes the requirements for a workload (pod).
 type WorkloadProfile struct {
 	CPURequirements    int
 	MemoryRequirements float64
@@ -32,6 +35,20 @@ type WorkloadProfile struct {
 	RequireNestedVirt  bool
 	RequireSpot        bool
 	RequireConfidential bool
+	// Add more fields as needed for filtering (e.g., labels, taints, etc.)
+}
+
+// WorkloadSet represents a set of workloads (pods) to be scheduled.
+type WorkloadSet []WorkloadProfile
+
+// PackingResult represents the result of bin-packing: which workloads are assigned to which VMs.
+type PackingResult struct {
+	VMs []PackedVM
+}
+
+type PackedVM struct {
+	InstanceType AzureInstanceSpec
+	Workloads    []WorkloadProfile
 }
 
 // SelectionStrategy defines the type of selection algorithm.
@@ -49,6 +66,82 @@ InstanceSelector is the interface for pluggable selection algorithms.
 */
 type InstanceSelector interface {
 	Select(candidates []AzureInstanceSpec, workload WorkloadProfile) (AzureInstanceSpec, float64)
+}
+
+// FilterFunc is a function that filters instance types based on requirements.
+type FilterFunc func(AzureInstanceSpec, WorkloadProfile) bool
+
+// ScoreFunc is a function that scores instance types for a workload.
+type ScoreFunc func(AzureInstanceSpec, WorkloadProfile) float64
+
+// FilterInstanceTypes filters a list of instance types based on a set of filter functions.
+func FilterInstanceTypes(candidates []AzureInstanceSpec, workload WorkloadProfile, filters ...FilterFunc) []AzureInstanceSpec {
+	var filtered []AzureInstanceSpec
+	for _, inst := range candidates {
+		ok := true
+		for _, filter := range filters {
+			if !filter(inst, workload) {
+				ok = false
+				break
+			}
+		}
+		if ok {
+			filtered = append(filtered, inst)
+		}
+	}
+	return filtered
+}
+
+// Example filter functions (can be extended)
+func FilterByZone(inst AzureInstanceSpec, workload WorkloadProfile) bool {
+	if workload.Zone == "" {
+		return true
+	}
+	for _, z := range inst.AvailabilityZones {
+		if z == workload.Zone {
+			return true
+		}
+	}
+	return false
+}
+
+func FilterByGPU(inst AzureInstanceSpec, workload WorkloadProfile) bool {
+	if workload.GPURequirements == 0 {
+		return true
+	}
+	if inst.GPUCount < workload.GPURequirements {
+		return false
+	}
+	if workload.GPUType != "" && !strings.EqualFold(inst.GPUType, workload.GPUType) {
+		return false
+	}
+	return true
+}
+
+func FilterByEphemeralOS(inst AzureInstanceSpec, workload WorkloadProfile) bool {
+	if !workload.RequireEphemeralOS {
+		return true
+	}
+	return inst.EphemeralOSDisk
+}
+
+// Add more filters as needed (e.g., spot, confidential, family, etc.)
+
+// RankInstanceTypes sorts instance types by score (descending).
+func RankInstanceTypes(candidates []AzureInstanceSpec, workload WorkloadProfile, score ScoreFunc) []AzureInstanceSpec {
+	// Simple selection sort for demonstration; replace with sort.Slice for production.
+	out := make([]AzureInstanceSpec, len(candidates))
+	copy(out, candidates)
+	for i := 0; i < len(out); i++ {
+		best := i
+		for j := i + 1; j < len(out); j++ {
+			if score(out[j], workload) > score(out[best], workload) {
+				best = j
+			}
+		}
+		out[i], out[best] = out[best], out[i]
+	}
+	return out
 }
 
 // GeneralPurposeSelector implements InstanceSelector for general workloads.
@@ -79,18 +172,30 @@ func (s *IOStrategySelector) Select(candidates []AzureInstanceSpec, workload Wor
 	return selectWithStrategy(candidates, workload, StrategyIOIntensive)
 }
 
-// selectWithStrategy is a helper to select the best instance with a given strategy.
+/*
+selectWithStrategy is a helper to select the best instance with a given strategy.
+This now uses filtering and ranking, similar to AWS Karpenter.
+*/
 func selectWithStrategy(candidates []AzureInstanceSpec, workload WorkloadProfile, strategy SelectionStrategy) (AzureInstanceSpec, float64) {
-	var best AzureInstanceSpec
-	bestScore := -1.0
-	for _, candidate := range candidates {
-		score := ScoreInstance(candidate, workload, strategy)
-		if score > bestScore {
-			bestScore = score
-			best = candidate
-		}
+	// Compose filters (add more as needed)
+	filters := []FilterFunc{
+		FilterByZone,
+		FilterByGPU,
+		FilterByEphemeralOS,
+		// Add more filters here
 	}
-	return best, bestScore
+	filtered := FilterInstanceTypes(candidates, workload, filters...)
+
+	// Choose scoring function based on strategy
+	scoreFunc := func(vm AzureInstanceSpec, w WorkloadProfile) float64 {
+		return ScoreInstance(vm, w, strategy)
+	}
+	ranked := RankInstanceTypes(filtered, workload, scoreFunc)
+	if len(ranked) == 0 {
+		return AzureInstanceSpec{}, -1
+	}
+	best := ranked[0]
+	return best, scoreFunc(best, workload)
 }
 
 // ScoreInstance scores a VM for a workload and strategy.
@@ -200,6 +305,67 @@ func min(a, b float64) float64 {
 		return a
 	}
 	return b
+}
+
+// --- Bin-packing (multi-workload scheduling) ---
+
+// BinPackWorkloads assigns workloads to VMs using a first-fit decreasing bin-packing algorithm.
+// Returns a PackingResult with the list of VMs and their assigned workloads.
+func BinPackWorkloads(workloads WorkloadSet, candidates []AzureInstanceSpec, strategy SelectionStrategy) PackingResult {
+	// Sort workloads by descending CPU+Memory demand (naive, can be improved)
+	sorted := make(WorkloadSet, len(workloads))
+	copy(sorted, workloads)
+	// Simple bubble sort for demonstration
+	for i := 0; i < len(sorted); i++ {
+		for j := i + 1; j < len(sorted); j++ {
+			if sorted[j].CPURequirements+int(sorted[j].MemoryRequirements) > sorted[i].CPURequirements+int(sorted[i].MemoryRequirements) {
+				sorted[i], sorted[j] = sorted[j], sorted[i]
+			}
+		}
+	}
+
+	var result PackingResult
+	unpacked := make([]bool, len(sorted))
+
+	for {
+		// Find the next workload not yet packed
+		nextIdx := -1
+		for i, packed := range unpacked {
+			if !packed {
+				nextIdx = i
+				break
+			}
+		}
+		if nextIdx == -1 {
+			break // all packed
+		}
+		// For this workload, select the best instance type
+		workload := sorted[nextIdx]
+		bestVM, _ := selectWithStrategy(candidates, workload, strategy)
+		if bestVM.Name == "" {
+			break // no suitable VM found
+		}
+		// Try to pack as many workloads as possible onto this VM
+		var packed []WorkloadProfile
+		remainingCPU := bestVM.VCpus
+		remainingMem := bestVM.MemoryGiB
+		for i, w := range sorted {
+			if unpacked[i] {
+				continue
+			}
+			if w.CPURequirements <= remainingCPU && w.MemoryRequirements <= remainingMem {
+				packed = append(packed, w)
+				remainingCPU -= w.CPURequirements
+				remainingMem -= w.MemoryRequirements
+				unpacked[i] = true
+			}
+		}
+		result.VMs = append(result.VMs, PackedVM{
+			InstanceType: bestVM,
+			Workloads:    packed,
+		})
+	}
+	return result
 }
 
 /*
