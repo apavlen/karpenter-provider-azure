@@ -148,6 +148,16 @@ The CSV will contain:
 
 You can then use tools like Excel, Google Sheets, or Python/pandas/matplotlib to visualize the efficiency gains.
 
+## Built-in Visualization
+
+A helper script is provided to plot the results directly:
+
+```bash
+python3 scripts/plot_simulation_results.py results.csv
+```
+
+This will generate bar charts comparing VMs used, total cost, and utilization for each strategy.
+
 ---
 
 ## Advanced: Regional SKU Fetching, Quota Simulation, and Custom Workload Generation
