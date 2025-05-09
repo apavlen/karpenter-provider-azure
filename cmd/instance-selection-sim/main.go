@@ -13,6 +13,7 @@ func main() {
 		traceSource = flag.String("trace", "google", "Trace source: google|azure|alibaba")
 		skuFile     = flag.String("sku", "azure_skus.json", "Path to Azure SKU JSON file")
 		maxRows     = flag.Int("max", 1000, "Max workloads to simulate")
+		outFile     = flag.String("out", "", "Optional: output CSV file for results")
 	)
 	flag.Parse()
 
@@ -29,8 +30,24 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := resolver.RunTraceSimulation(src, *skuFile, *maxRows); err != nil {
+	// Run simulation and capture results
+	result, naive, err := resolver.RunTraceSimulationWithResults(src, *skuFile, *maxRows)
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "Simulation failed: %v\n", err)
 		os.Exit(2)
+	}
+
+	// Optionally write results to CSV
+	if *outFile != "" {
+		f, err := os.Create(*outFile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to create output file: %v\n", err)
+			os.Exit(3)
+		}
+		defer f.Close()
+		fmt.Fprintf(f, "Strategy,VMs Used,Total Cost,Avg CPU Util (%),Avg Mem Util (%)\n")
+		fmt.Fprintf(f, "NewAlgorithm,%d,%.2f,%.1f,%.1f\n", result.VMsUsed, result.TotalCost, result.AvgCPU, result.AvgMem)
+		fmt.Fprintf(f, "Naive,%d,%.2f,%.1f,%.1f\n", naive.VMsUsed, naive.TotalCost, naive.AvgCPU, naive.AvgMem)
+		fmt.Printf("Results written to %s\n", *outFile)
 	}
 }

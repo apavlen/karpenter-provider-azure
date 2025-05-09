@@ -295,34 +295,60 @@ func AverageUtilization(vms []PackedVM) (cpuUtil, memUtil float64) {
 	return
 }
 
+type SimulationResult struct {
+	VMsUsed   int
+	TotalCost float64
+	AvgCPU    float64
+	AvgMem    float64
+}
+
 // RunTraceSimulation downloads, caches, preprocesses, and runs a simulation for a given trace.
 func RunTraceSimulation(trace TraceSource, skuPath string, maxRows int) error {
+	result, naive, err := RunTraceSimulationWithResults(trace, skuPath, maxRows)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Results:\n")
+	fmt.Printf("New algorithm: VMs=%d, Cost=%.2f/hr\n", result.VMsUsed, result.TotalCost)
+	fmt.Printf("  Avg CPU utilization: %.1f%%, Avg Mem utilization: %.1f%%\n", result.AvgCPU, result.AvgMem)
+	fmt.Printf("Naive: VMs=%d, Cost=%.2f/hr\n", naive.VMsUsed, naive.TotalCost)
+	fmt.Printf("  Avg CPU utilization: %.1f%%, Avg Mem utilization: %.1f%%\n", naive.AvgCPU, naive.AvgMem)
+	return nil
+}
+
+// RunTraceSimulationWithResults returns results for both new and naive algorithms for export/visualization.
+func RunTraceSimulationWithResults(trace TraceSource, skuPath string, maxRows int) (SimulationResult, SimulationResult, error) {
 	cacheDir := ".trace_cache"
 	os.MkdirAll(cacheDir, 0755)
 	tracePath, err := DownloadTrace(trace, cacheDir)
 	if err != nil {
-		return fmt.Errorf("download trace: %w", err)
+		return SimulationResult{}, SimulationResult{}, fmt.Errorf("download trace: %w", err)
 	}
 	fmt.Printf("Parsing workloads from %s...\n", tracePath)
 	workloads, err := LoadWorkloadsFromTrace(tracePath, trace, maxRows)
 	if err != nil {
-		return fmt.Errorf("parse trace: %w", err)
+		return SimulationResult{}, SimulationResult{}, fmt.Errorf("parse trace: %w", err)
 	}
 	fmt.Printf("Loading Azure instance specs from %s...\n", skuPath)
 	skus, err := LoadAzureInstanceSpecs(skuPath)
 	if err != nil {
-		return fmt.Errorf("load skus: %w", err)
+		return SimulationResult{}, SimulationResult{}, fmt.Errorf("load skus: %w", err)
 	}
 	fmt.Printf("Simulating bin-packing with new algorithm...\n")
 	result := BinPackWorkloads(workloads, skus, StrategyGeneralPurpose)
 	fmt.Printf("Simulating bin-packing with naive algorithm...\n")
 	naive := BinPackWorkloadsNaive(workloads, skus)
-	fmt.Printf("Results:\n")
-	fmt.Printf("New algorithm: VMs=%d, Cost=%.2f/hr\n", len(result.VMs), TotalCost(result.VMs))
 	cpuU, memU := AverageUtilization(result.VMs)
-	fmt.Printf("  Avg CPU utilization: %.1f%%, Avg Mem utilization: %.1f%%\n", cpuU, memU)
-	fmt.Printf("Naive: VMs=%d, Cost=%.2f/hr\n", len(naive.VMs), TotalCost(naive.VMs))
-	cpuU, memU = AverageUtilization(naive.VMs)
-	fmt.Printf("  Avg CPU utilization: %.1f%%, Avg Mem utilization: %.1f%%\n", cpuU, memU)
-	return nil
+	cpuU2, memU2 := AverageUtilization(naive.VMs)
+	return SimulationResult{
+			VMsUsed:   len(result.VMs),
+			TotalCost: TotalCost(result.VMs),
+			AvgCPU:    cpuU,
+			AvgMem:    memU,
+		}, SimulationResult{
+			VMsUsed:   len(naive.VMs),
+			TotalCost: TotalCost(naive.VMs),
+			AvgCPU:    cpuU2,
+			AvgMem:    memU2,
+		}, nil
 }

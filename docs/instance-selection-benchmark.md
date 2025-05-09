@@ -127,3 +127,23 @@ go run ./cmd/instance-selection-sim/ -trace google -sku azure_skus.json -max 100
 ```
 
 You can also use `-trace azure` or `-trace alibaba` for other datasets.
+
+## Visualizing and Exporting Results
+
+To further analyze and visualize the results, you can export the simulation output to a CSV file for plotting or reporting.  
+The CLI supports an optional `-out results.csv` flag to write a summary of the simulation results.
+
+Example:
+
+```bash
+go run ./cmd/instance-selection-sim/ -trace google -sku azure_skus.json -max 1000 -out results.csv
+```
+
+The CSV will contain:
+
+| Strategy      | VMs Used | Total Cost | Avg CPU Util (%) | Avg Mem Util (%) |
+|---------------|----------|------------|------------------|------------------|
+| NewAlgorithm  | 5        | 1.20       | 85.0             | 80.0             |
+| Naive         | 9        | 1.80       | 45.0             | 40.0             |
+
+You can then use tools like Excel, Google Sheets, or Python/pandas/matplotlib to visualize the efficiency gains.
