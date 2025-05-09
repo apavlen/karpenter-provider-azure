@@ -44,7 +44,9 @@ const (
 	StrategyIOIntensive    SelectionStrategy = "io"
 )
 
-// InstanceSelector is the interface for pluggable selection algorithms.
+/*
+InstanceSelector is the interface for pluggable selection algorithms.
+*/
 type InstanceSelector interface {
 	Select(candidates []AzureInstanceSpec, workload WorkloadProfile) (AzureInstanceSpec, float64)
 }
@@ -53,10 +55,36 @@ type InstanceSelector interface {
 type GeneralPurposeSelector struct{}
 
 func (s *GeneralPurposeSelector) Select(candidates []AzureInstanceSpec, workload WorkloadProfile) (AzureInstanceSpec, float64) {
+	return selectWithStrategy(candidates, workload, StrategyGeneralPurpose)
+}
+
+// CPUStrategySelector implements InstanceSelector for CPU-optimized workloads.
+type CPUStrategySelector struct{}
+
+func (s *CPUStrategySelector) Select(candidates []AzureInstanceSpec, workload WorkloadProfile) (AzureInstanceSpec, float64) {
+	return selectWithStrategy(candidates, workload, StrategyCPUIntensive)
+}
+
+// MemoryStrategySelector implements InstanceSelector for memory-optimized workloads.
+type MemoryStrategySelector struct{}
+
+func (s *MemoryStrategySelector) Select(candidates []AzureInstanceSpec, workload WorkloadProfile) (AzureInstanceSpec, float64) {
+	return selectWithStrategy(candidates, workload, StrategyMemoryIntensive)
+}
+
+// IOStrategySelector implements InstanceSelector for IO-optimized workloads.
+type IOStrategySelector struct{}
+
+func (s *IOStrategySelector) Select(candidates []AzureInstanceSpec, workload WorkloadProfile) (AzureInstanceSpec, float64) {
+	return selectWithStrategy(candidates, workload, StrategyIOIntensive)
+}
+
+// selectWithStrategy is a helper to select the best instance with a given strategy.
+func selectWithStrategy(candidates []AzureInstanceSpec, workload WorkloadProfile, strategy SelectionStrategy) (AzureInstanceSpec, float64) {
 	var best AzureInstanceSpec
 	bestScore := -1.0
 	for _, candidate := range candidates {
-		score := ScoreInstance(candidate, workload, StrategyGeneralPurpose)
+		score := ScoreInstance(candidate, workload, strategy)
 		if score > bestScore {
 			bestScore = score
 			best = candidate
@@ -174,9 +202,28 @@ func min(a, b float64) float64 {
 	return b
 }
 
-// SelectBestInstance is a convenience function for general-purpose selection.
+/*
+SelectBestInstance is a convenience function for general-purpose selection.
+*/
 func SelectBestInstance(candidates []AzureInstanceSpec, workload WorkloadProfile) AzureInstanceSpec {
 	selector := &GeneralPurposeSelector{}
+	best, _ := selector.Select(candidates, workload)
+	return best
+}
+
+// SelectBestInstanceWithStrategy allows selection with a specific strategy.
+func SelectBestInstanceWithStrategy(candidates []AzureInstanceSpec, workload WorkloadProfile, strategy SelectionStrategy) AzureInstanceSpec {
+	var selector InstanceSelector
+	switch strategy {
+	case StrategyCPUIntensive:
+		selector = &CPUStrategySelector{}
+	case StrategyMemoryIntensive:
+		selector = &MemoryStrategySelector{}
+	case StrategyIOIntensive:
+		selector = &IOStrategySelector{}
+	default:
+		selector = &GeneralPurposeSelector{}
+	}
 	best, _ := selector.Select(candidates, workload)
 	return best
 }
