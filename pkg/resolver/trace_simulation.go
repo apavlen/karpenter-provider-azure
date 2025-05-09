@@ -1,7 +1,6 @@
 package resolver
 
 import (
-	"archive/zip"
 	"encoding/csv"
 	"encoding/json"
 	"errors"
@@ -12,8 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
-	"time"
 )
 
 // TraceSource represents a public trace dataset.
