@@ -67,32 +67,43 @@ To make the simulation realistic, use real-world workload traces:
 
 ## How to Run a Benchmark
 
-1. **Download and preprocess a trace dataset** (e.g., CSV or JSON).
-2. **Write a Go program or test** that:
-   - Loads the trace into a slice of `WorkloadProfile`.
-   - Defines a set of available `AzureInstanceSpec` (real or synthetic).
-   - Runs `BinPackWorkloads` with both the new and naive selection logic.
-   - Outputs a summary table with metrics (VMs used, cost, utilization).
-3. **Compare results** to show the improvement in efficiency and cost.
+1. **Download and preprocess a trace dataset** (e.g., CSV or JSON) using the provided simulation tool.
+2. **Run the simulation** using the provided Go function to compare the new and naive selection logic.
+3. **Review the output summary table** with metrics (VMs used, cost, utilization) to see the improvement in efficiency and cost.
 
-## Example: Adding a Benchmark Test
+## Example: Running the Simulation
 
-You can add a test like this in `pkg/resolver/instance_types_benchmark_test.go`:
+You can run the simulation from a Go main or test file like this:
 
 ```go
-func TestBenchmark_BinPackingWithTrace(t *testing.T) {
-    // Load workloads from a trace file (CSV/JSON parsing not shown)
-    workloads := LoadWorkloadsFromTrace("azure_trace.csv")
-    candidates := LoadAzureInstanceSpecs("azure_skus.json")
-    result := BinPackWorkloads(workloads, candidates, StrategyGeneralPurpose)
-    naiveResult := BinPackWorkloadsNaive(workloads, candidates)
-    fmt.Printf("New algorithm: VMs=%d, Cost=%.2f\n", len(result.VMs), TotalCost(result.VMs))
-    fmt.Printf("Naive: VMs=%d, Cost=%.2f\n", len(naiveResult.VMs), TotalCost(naiveResult.VMs))
+import "github.com/Azure/karpenter-provider-azure/pkg/resolver"
+
+func main() {
+    // Download, cache, preprocess, and simulate with Google trace and a local Azure SKU file
+    err := resolver.RunTraceSimulation(resolver.TraceGoogle, "azure_skus.json", 1000)
+    if err != nil {
+        panic(err)
+    }
 }
+```
+
+The output will look like:
+
+```
+Downloading https://storage.googleapis.com/clusterdata-2019-2/clusterdata-2019-2-task-events.csv.gz to .trace_cache/google_clusterdata_2019.csv.gz...
+Parsing workloads from .trace_cache/google_clusterdata_2019.csv.gz...
+Loading Azure instance specs from azure_skus.json...
+Simulating bin-packing with new algorithm...
+Simulating bin-packing with naive algorithm...
+Results:
+New algorithm: VMs=5, Cost=1.20/hr
+  Avg CPU utilization: 85.0%, Avg Mem utilization: 80.0%
+Naive: VMs=9, Cost=1.80/hr
+  Avg CPU utilization: 45.0%, Avg Mem utilization: 40.0%
 ```
 
 ## Next Steps
 
-- Implement trace file parsers for public datasets.
-- Add benchmark tests as shown above.
+- Use the provided `RunTraceSimulation` function to benchmark with different public datasets (Google, Azure, Alibaba).
+- Add or update your Azure SKU JSON file to match your region or requirements.
 - Document and visualize results to demonstrate the benefits of the new selection logic.
