@@ -58,6 +58,61 @@ This document describes the design for an extensible Azure instance type selecti
 - Unit tests for scoring and selection logic.
 - Integration tests with sample instance specs and workloads.
 
+## Suggestions for Enhancement
+
+### 1. Azure-specific Considerations
+
+- **VM Series Specialization**: Add explicit logic for Azure VM families (e.g., Dv5, Ev5, N-series) to leverage their unique characteristics.
+- **Azure Spot VMs**: Incorporate Azure's spot VM implementation, which differs from AWS, including eviction rates and pricing.
+- **Azure Quotas**: Make the selection algorithm quota-aware, considering regional vCPU and resource quotas.
+
+### 2. Data Model Enhancements
+
+- **GPU Support**: Add GPU count and type for N-series VMs.
+- **Availability Zones**: Track which zones each VM type is available in.
+- **Ephemeral OS Disk Support**: Flag for ephemeral OS disk capability.
+- **Nested Virtualization Support**: Flag for nested virtualization support.
+
+### 3. Algorithm Refinements
+
+- **Compliance & Regulatory**: Add strategies for compliance (e.g., confidential computing, region restrictions).
+- **Multi-dimensional Scoring**: Use a weighted scoring system to balance cost, fit, compliance, and other factors.
+- **Fallback Mechanism**: Implement fallback logic when optimal instances are unavailable.
+
+### 4. Implementation Considerations
+
+- **Cache Azure VM SKU Information**: Cache VM specs to avoid repeated Azure API calls.
+- **Versioning**: Plan for Azure Compute API versioning.
+- **Rate Limiting**: Handle Azure API rate limits gracefully.
+
+### 5. Testing Strategy
+
+- **Regional Variations**: Test with different Azure regions due to VM availability differences.
+- **Benchmark Against Actual Pricing**: Validate selection with real pricing data.
+- **Failure Scenarios**: Test behavior when preferred or required instances are unavailable.
+
+## Implementation Phases
+
+**Phase 1: Core Infrastructure**
+- Basic data structures and interfaces
+- Simple scoring algorithm for general-purpose VMs
+- Unit test framework
+
+**Phase 2: Azure Integration**
+- Azure API client for VM information
+- Azure-specific constraints and capabilities
+- Integration tests with mocked Azure responses
+
+**Phase 3: Selection Strategies**
+- Implement specialized strategies (CPU, memory, IO)
+- Cost optimization logic
+- Benchmark framework
+
+**Phase 4: Advanced Features**
+- Spot VM support
+- Predictive scaling
+- Production readiness (logging, monitoring, etc.)
+
 ## Next Steps
 
 1. Define data structures for AzureInstanceSpec and WorkloadProfile.
