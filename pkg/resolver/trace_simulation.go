@@ -415,6 +415,10 @@ func RunTraceSimulationWithQuota(trace TraceSource, skuPath string, maxRows int,
 	fmt.Printf("Parsing workloads from %s...\n", tracePath)
 	workloads, err := LoadWorkloadsFromTrace(tracePath, trace, maxRows)
 	if err != nil {
+		// Check for XML error (e.g. bucket not found or download failed)
+		if strings.Contains(err.Error(), "<?xml") || strings.Contains(err.Error(), "<Error>") {
+			return SimulationResult{}, SimulationResult{}, fmt.Errorf("parse trace: trace file is not a valid CSV (possible download error or missing bucket): %w", err)
+		}
 		return SimulationResult{}, SimulationResult{}, fmt.Errorf("parse trace: %w", err)
 	}
 	fmt.Printf("Loading Azure instance specs from %s...\n", skuPath)
