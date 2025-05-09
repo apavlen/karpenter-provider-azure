@@ -125,11 +125,6 @@ func TestGeneralPurposeSelector_Zone(t *testing.T) {
 		t.Errorf("expected Standard_E4_v4, got %s", best.Name)
 	}
 }
-package resolver
-
-import (
-	"testing"
-)
 
 func TestGeneralPurposeSelector_Simple(t *testing.T) {
 	candidates := []AzureInstanceSpec{
