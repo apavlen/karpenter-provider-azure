@@ -316,8 +316,14 @@ func RunTraceSimulation(trace TraceSource, skuPath string, maxRows int) error {
 	return nil
 }
 
-// RunTraceSimulationWithResults returns results for both new and naive algorithms for export/visualization.
+/*
+RunTraceSimulationWithResults returns results for both new and naive algorithms for export/visualization.
+If trace == "custom", this function will return an error (use RunCustomWorkloadSimulation).
+*/
 func RunTraceSimulationWithResults(trace TraceSource, skuPath string, maxRows int) (SimulationResult, SimulationResult, error) {
+	if trace == "custom" {
+		return SimulationResult{}, SimulationResult{}, fmt.Errorf("custom trace not supported here, use RunCustomWorkloadSimulation")
+	}
 	cacheDir := ".trace_cache"
 	os.MkdirAll(cacheDir, 0755)
 	tracePath, err := DownloadTrace(trace, cacheDir)
@@ -329,6 +335,44 @@ func RunTraceSimulationWithResults(trace TraceSource, skuPath string, maxRows in
 	if err != nil {
 		return SimulationResult{}, SimulationResult{}, fmt.Errorf("parse trace: %w", err)
 	}
+	fmt.Printf("Loading Azure instance specs from %s...\n", skuPath)
+	skus, err := LoadAzureInstanceSpecs(skuPath)
+	if err != nil {
+		return SimulationResult{}, SimulationResult{}, fmt.Errorf("load skus: %w", err)
+	}
+	fmt.Printf("Simulating bin-packing with new algorithm...\n")
+	result := BinPackWorkloads(workloads, skus, StrategyGeneralPurpose)
+	fmt.Printf("Simulating bin-packing with naive algorithm...\n")
+	naive := BinPackWorkloadsNaive(workloads, skus)
+	cpuU, memU := AverageUtilization(result.VMs)
+	cpuU2, memU2 := AverageUtilization(naive.VMs)
+	return SimulationResult{
+			VMsUsed:   len(result.VMs),
+			TotalCost: TotalCost(result.VMs),
+			AvgCPU:    cpuU,
+			AvgMem:    memU,
+		}, SimulationResult{
+			VMsUsed:   len(naive.VMs),
+			TotalCost: TotalCost(naive.VMs),
+			AvgCPU:    cpuU2,
+			AvgMem:    memU2,
+		}, nil
+}
+
+/*
+RunCustomWorkloadSimulation loads a custom workload JSON file and runs the simulation.
+The JSON file should be an array of objects with CPURequirements and MemoryRequirements.
+*/
+func RunCustomWorkloadSimulation(workloadsFile string, skuPath string) (SimulationResult, SimulationResult, error) {
+	data, err := ioutil.ReadFile(workloadsFile)
+	if err != nil {
+		return SimulationResult{}, SimulationResult{}, fmt.Errorf("read workloads: %w", err)
+	}
+	var workloads []WorkloadProfile
+	if err := json.Unmarshal(data, &workloads); err != nil {
+		return SimulationResult{}, SimulationResult{}, fmt.Errorf("parse workloads: %w", err)
+	}
+	fmt.Printf("Loaded %d custom workloads from %s\n", len(workloads), workloadsFile)
 	fmt.Printf("Loading Azure instance specs from %s...\n", skuPath)
 	skus, err := LoadAzureInstanceSpecs(skuPath)
 	if err != nil {

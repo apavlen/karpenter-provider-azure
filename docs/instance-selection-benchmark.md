@@ -147,3 +147,65 @@ The CSV will contain:
 | Naive         | 9        | 1.80       | 45.0             | 40.0             |
 
 You can then use tools like Excel, Google Sheets, or Python/pandas/matplotlib to visualize the efficiency gains.
+
+---
+
+## Advanced: Regional SKU Fetching, Quota Simulation, and Custom Workload Generation
+
+### 1. Fetching SKUs for Different Azure Regions
+
+To benchmark with SKUs from a specific Azure region, edit the `API` variable in `scripts/fetch_azure_skus.py`:
+
+```python
+API = "https://prices.azure.com/api/retail/prices?$filter=serviceName eq 'Virtual Machines' and armRegionName eq 'westeurope'"
+```
+
+Then run:
+
+```bash
+python3 scripts/fetch_azure_skus.py > azure_skus_westeurope.json
+```
+
+### 2. Simulating Quota Constraints
+
+To simulate quota constraints (e.g., max vCPUs per family/region), you can:
+- Add a `quota.json` file with limits per VM family.
+- Extend the Go simulation to read this file and filter out SKUs or limit the number of VMs per family.
+
+### 3. Custom Workload Generation
+
+To generate synthetic workloads for stress-testing:
+
+```python
+import random, json
+
+def gen_workloads(n):
+    return [
+        {
+            "CPURequirements": random.choice([1,2,4,8]),
+            "MemoryRequirements": random.choice([2,4,8,16,32])
+        }
+        for _ in range(n)
+    ]
+
+with open("synthetic_workloads.json", "w") as f:
+    json.dump(gen_workloads(1000), f, indent=2)
+```
+
+Then, add a loader in Go to read this JSON and run the simulation.
+
+### 4. Example: Running with Custom Workloads
+
+```bash
+go run ./cmd/instance-selection-sim/ -trace custom -sku azure_skus.json -max 1000 -workloads synthetic_workloads.json
+```
+
+---
+
+## Future Work
+
+- Add support for quota-aware scheduling and reporting.
+- Add support for spot/eviction simulation.
+- Add support for compliance/region/family constraints.
+- Add more advanced bin-packing and prediction strategies.
+- Integrate with real Azure API for live SKU/pricing updates.
