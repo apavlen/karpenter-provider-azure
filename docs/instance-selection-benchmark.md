@@ -169,8 +169,23 @@ python3 scripts/fetch_azure_skus.py > azure_skus_westeurope.json
 ### 2. Simulating Quota Constraints
 
 To simulate quota constraints (e.g., max vCPUs per family/region), you can:
-- Add a `quota.json` file with limits per VM family.
+- Add a `quota.json` file with limits per VM family, e.g.:
+  ```json
+  {
+    "Standard_D": 32,
+    "Standard_E": 64
+  }
+  ```
 - Extend the Go simulation to read this file and filter out SKUs or limit the number of VMs per family.
+
+#### Example: Using Quota Constraints
+
+1. Create a `quota.json` file as above.
+2. Run the simulation with the new `-quota quota.json` flag:
+   ```bash
+   go run ./cmd/instance-selection-sim/ -trace google -sku azure_skus.json -max 1000 -quota quota.json
+   ```
+3. The simulation will ensure that the total vCPUs used per family does not exceed the quota.
 
 ### 3. Custom Workload Generation
 

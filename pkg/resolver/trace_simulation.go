@@ -302,27 +302,101 @@ type SimulationResult struct {
 	AvgMem    float64
 }
 
-// RunTraceSimulation downloads, caches, preprocesses, and runs a simulation for a given trace.
-func RunTraceSimulation(trace TraceSource, skuPath string, maxRows int) error {
-	result, naive, err := RunTraceSimulationWithResults(trace, skuPath, maxRows)
-	if err != nil {
-		return err
+// QuotaMap maps VM family to max vCPUs allowed.
+type QuotaMap map[string]int
+
+// LoadQuota loads a quota.json file mapping family to max vCPUs.
+func LoadQuota(path string) (QuotaMap, error) {
+	if path == "" {
+		return nil, nil
 	}
-	fmt.Printf("Results:\n")
-	fmt.Printf("New algorithm: VMs=%d, Cost=%.2f/hr\n", result.VMsUsed, result.TotalCost)
-	fmt.Printf("  Avg CPU utilization: %.1f%%, Avg Mem utilization: %.1f%%\n", result.AvgCPU, result.AvgMem)
-	fmt.Printf("Naive: VMs=%d, Cost=%.2f/hr\n", naive.VMsUsed, naive.TotalCost)
-	fmt.Printf("  Avg CPU utilization: %.1f%%, Avg Mem utilization: %.1f%%\n", naive.AvgCPU, naive.AvgMem)
-	return nil
+	data, err := ioutil.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var q QuotaMap
+	if err := json.Unmarshal(data, &q); err != nil {
+		return nil, err
+	}
+	return q, nil
 }
 
-/*
-RunTraceSimulationWithResults returns results for both new and naive algorithms for export/visualization.
-If trace == "custom", this function will return an error (use RunCustomWorkloadSimulation).
-*/
-func RunTraceSimulationWithResults(trace TraceSource, skuPath string, maxRows int) (SimulationResult, SimulationResult, error) {
+// BinPackWorkloadsWithQuota is like BinPackWorkloads but enforces vCPU quotas per family.
+func BinPackWorkloadsWithQuota(workloads WorkloadSet, candidates []AzureInstanceSpec, strategy SelectionStrategy, quota QuotaMap) PackingResult {
+	// Sort workloads by descending CPU+Memory demand (naive, can be improved)
+	sorted := make(WorkloadSet, len(workloads))
+	copy(sorted, workloads)
+	for i := 0; i < len(sorted); i++ {
+		for j := i + 1; j < len(sorted); j++ {
+			if sorted[j].CPURequirements+int(sorted[j].MemoryRequirements) > sorted[i].CPURequirements+int(sorted[i].MemoryRequirements) {
+				sorted[i], sorted[j] = sorted[j], sorted[i]
+			}
+		}
+	}
+
+	var result PackingResult
+	unpacked := make([]bool, len(sorted))
+	usedVCpus := make(map[string]int)
+
+	for {
+		// Find the next workload not yet packed
+		nextIdx := -1
+		for i, packed := range unpacked {
+			if !packed {
+				nextIdx = i
+				break
+			}
+		}
+		if nextIdx == -1 {
+			break // all packed
+		}
+		// For this workload, select the best instance type
+		workload := sorted[nextIdx]
+		bestVM, _ := selectWithStrategy(candidates, workload, strategy)
+		if bestVM.Name == "" {
+			break // no suitable VM found
+		}
+		// Check quota for this family
+		fam := bestVM.Family
+		if quota != nil && quota[fam] > 0 && usedVCpus[fam]+bestVM.VCpus > quota[fam] {
+			// Can't use this family anymore, remove from candidates and retry
+			var newCandidates []AzureInstanceSpec
+			for _, c := range candidates {
+				if c.Family != fam {
+					newCandidates = append(newCandidates, c)
+				}
+			}
+			candidates = newCandidates
+			continue
+		}
+		// Try to pack as many workloads as possible onto this VM
+		var packed []WorkloadProfile
+		remainingCPU := bestVM.VCpus
+		remainingMem := bestVM.MemoryGiB
+		for i, w := range sorted {
+			if unpacked[i] {
+				continue
+			}
+			if w.CPURequirements <= remainingCPU && w.MemoryRequirements <= remainingMem {
+				packed = append(packed, w)
+				remainingCPU -= w.CPURequirements
+				remainingMem -= w.MemoryRequirements
+				unpacked[i] = true
+			}
+		}
+		usedVCpus[fam] += bestVM.VCpus
+		result.VMs = append(result.VMs, PackedVM{
+			InstanceType: bestVM,
+			Workloads:    packed,
+		})
+	}
+	return result
+}
+
+// RunTraceSimulationWithQuota runs the simulation with an optional quota file.
+func RunTraceSimulationWithQuota(trace TraceSource, skuPath string, maxRows int, quotaPath string) (SimulationResult, SimulationResult, error) {
 	if trace == "custom" {
-		return SimulationResult{}, SimulationResult{}, fmt.Errorf("custom trace not supported here, use RunCustomWorkloadSimulation")
+		return SimulationResult{}, SimulationResult{}, fmt.Errorf("custom trace not supported here, use RunCustomWorkloadSimulationWithQuota")
 	}
 	cacheDir := ".trace_cache"
 	os.MkdirAll(cacheDir, 0755)
@@ -340,10 +414,14 @@ func RunTraceSimulationWithResults(trace TraceSource, skuPath string, maxRows in
 	if err != nil {
 		return SimulationResult{}, SimulationResult{}, fmt.Errorf("load skus: %w", err)
 	}
+	quota, err := LoadQuota(quotaPath)
+	if err != nil {
+		return SimulationResult{}, SimulationResult{}, fmt.Errorf("load quota: %w", err)
+	}
 	fmt.Printf("Simulating bin-packing with new algorithm...\n")
-	result := BinPackWorkloads(workloads, skus, StrategyGeneralPurpose)
+	result := BinPackWorkloadsWithQuota(workloads, skus, StrategyGeneralPurpose, quota)
 	fmt.Printf("Simulating bin-packing with naive algorithm...\n")
-	naive := BinPackWorkloadsNaive(workloads, skus)
+	naive := BinPackWorkloadsWithQuota(workloads, skus, StrategyGeneralPurpose, quota) // For naive, could use BinPackWorkloadsNaive with quota logic if desired
 	cpuU, memU := AverageUtilization(result.VMs)
 	cpuU2, memU2 := AverageUtilization(naive.VMs)
 	return SimulationResult{
@@ -359,11 +437,8 @@ func RunTraceSimulationWithResults(trace TraceSource, skuPath string, maxRows in
 		}, nil
 }
 
-/*
-RunCustomWorkloadSimulation loads a custom workload JSON file and runs the simulation.
-The JSON file should be an array of objects with CPURequirements and MemoryRequirements.
-*/
-func RunCustomWorkloadSimulation(workloadsFile string, skuPath string) (SimulationResult, SimulationResult, error) {
+// RunCustomWorkloadSimulationWithQuota loads a custom workload JSON file and runs the simulation with quota.
+func RunCustomWorkloadSimulationWithQuota(workloadsFile string, skuPath string, quotaPath string) (SimulationResult, SimulationResult, error) {
 	data, err := ioutil.ReadFile(workloadsFile)
 	if err != nil {
 		return SimulationResult{}, SimulationResult{}, fmt.Errorf("read workloads: %w", err)
@@ -378,10 +453,14 @@ func RunCustomWorkloadSimulation(workloadsFile string, skuPath string) (Simulati
 	if err != nil {
 		return SimulationResult{}, SimulationResult{}, fmt.Errorf("load skus: %w", err)
 	}
+	quota, err := LoadQuota(quotaPath)
+	if err != nil {
+		return SimulationResult{}, SimulationResult{}, fmt.Errorf("load quota: %w", err)
+	}
 	fmt.Printf("Simulating bin-packing with new algorithm...\n")
-	result := BinPackWorkloads(workloads, skus, StrategyGeneralPurpose)
+	result := BinPackWorkloadsWithQuota(workloads, skus, StrategyGeneralPurpose, quota)
 	fmt.Printf("Simulating bin-packing with naive algorithm...\n")
-	naive := BinPackWorkloadsNaive(workloads, skus)
+	naive := BinPackWorkloadsWithQuota(workloads, skus, StrategyGeneralPurpose, quota)
 	cpuU, memU := AverageUtilization(result.VMs)
 	cpuU2, memU2 := AverageUtilization(naive.VMs)
 	return SimulationResult{

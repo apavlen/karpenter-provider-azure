@@ -10,11 +10,12 @@ import (
 
 func main() {
 	var (
-		traceSource = flag.String("trace", "google", "Trace source: google|azure|alibaba|custom")
-		skuFile     = flag.String("sku", "azure_skus.json", "Path to Azure SKU JSON file")
-		maxRows     = flag.Int("max", 1000, "Max workloads to simulate")
-		outFile     = flag.String("out", "", "Optional: output CSV file for results")
+		traceSource   = flag.String("trace", "google", "Trace source: google|azure|alibaba|custom")
+		skuFile       = flag.String("sku", "azure_skus.json", "Path to Azure SKU JSON file")
+		maxRows       = flag.Int("max", 1000, "Max workloads to simulate")
+		outFile       = flag.String("out", "", "Optional: output CSV file for results")
 		workloadsFile = flag.String("workloads", "", "Optional: path to custom workloads JSON file")
+		quotaFile     = flag.String("quota", "", "Optional: path to quota JSON file")
 	)
 	flag.Parse()
 
@@ -35,7 +36,7 @@ func main() {
 
 	// If custom workloads file is provided, use it
 	if src == "custom" && *workloadsFile != "" {
-		result, naive, err := resolver.RunCustomWorkloadSimulation(*workloadsFile, *skuFile)
+		result, naive, err := resolver.RunCustomWorkloadSimulationWithQuota(*workloadsFile, *skuFile, *quotaFile)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Simulation failed: %v\n", err)
 			os.Exit(2)
@@ -56,7 +57,7 @@ func main() {
 	}
 
 	// Run simulation and capture results
-	result, naive, err := resolver.RunTraceSimulationWithResults(src, *skuFile, *maxRows)
+	result, naive, err := resolver.RunTraceSimulationWithQuota(src, *skuFile, *maxRows, *quotaFile)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Simulation failed: %v\n", err)
 		os.Exit(2)
