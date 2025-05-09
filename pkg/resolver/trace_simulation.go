@@ -141,19 +141,20 @@ func LoadWorkloadsFromTrace(tracePath string, source TraceSource, maxRows int) (
 
 	switch source {
 	case TraceGoogle:
-		// Google trace: columns: ... requested_cpu, requested_memory, ...
-		// Find column indices
+		// Google trace: columns: ... requested_cpu, requested_memory, ... OR cpu_request, memory_request, ...
+		// Try to find either set of columns for robustness
 		cpuIdx, memIdx := -1, -1
 		for i, col := range header {
-			if col == "requested_cpu" {
+			lc := strings.ToLower(col)
+			if lc == "requested_cpu" || lc == "cpu_request" {
 				cpuIdx = i
 			}
-			if col == "requested_memory" {
+			if lc == "requested_memory" || lc == "memory_request" {
 				memIdx = i
 			}
 		}
 		if cpuIdx == -1 || memIdx == -1 {
-			return nil, errors.New("could not find requested_cpu/requested_memory columns")
+			return nil, fmt.Errorf("could not find requested_cpu/requested_memory or cpu_request/memory_request columns (found header: %v)", header)
 		}
 		for i := 0; i < maxRows; i++ {
 			row, err := csvr.Read()
