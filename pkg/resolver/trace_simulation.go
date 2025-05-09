@@ -1,6 +1,7 @@
 package resolver
 
 import (
+	"compress/gzip"
 	"encoding/csv"
 	"encoding/json"
 	"errors"
@@ -11,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 )
 
 // TraceSource represents a public trace dataset.
@@ -60,28 +62,60 @@ func DownloadTrace(source TraceSource, destDir string) (string, error) {
 	return destPath, nil
 }
 
-// LoadWorkloadsFromTrace parses a trace file into a slice of WorkloadProfile.
-// Supports Google, Azure, and Alibaba public traces (basic parsing).
+/*
+LoadWorkloadsFromTrace parses a trace file into a slice of WorkloadProfile.
+Supports Google, Azure, and Alibaba public traces (robust parsing).
+Handles .gz files for Google trace.
+*/
 func LoadWorkloadsFromTrace(tracePath string, source TraceSource, maxRows int) ([]WorkloadProfile, error) {
+	var r io.Reader
 	f, err := os.Open(tracePath)
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
-	var workloads []WorkloadProfile
+	r = f
+
+	// Handle .gz for Google trace
+	if source == TraceGoogle && strings.HasSuffix(tracePath, ".gz") {
+		gzr, err := gzip.NewReader(f)
+		if err != nil {
+			return nil, err
+		}
+		defer gzr.Close()
+		r = gzr
+	}
+
+	workloads := make([]WorkloadProfile, 0, maxRows)
+	csvr := csv.NewReader(r)
+	header, err := csvr.Read()
+	if err != nil {
+		return nil, err
+	}
+
 	switch source {
 	case TraceGoogle:
-		// Google trace: CSV, columns: ... requested_cpu, requested_memory, ...
-		r := csv.NewReader(f)
-		_, _ = r.Read() // skip header
+		// Google trace: columns: ... requested_cpu, requested_memory, ...
+		// Find column indices
+		cpuIdx, memIdx := -1, -1
+		for i, col := range header {
+			if col == "requested_cpu" {
+				cpuIdx = i
+			}
+			if col == "requested_memory" {
+				memIdx = i
+			}
+		}
+		if cpuIdx == -1 || memIdx == -1 {
+			return nil, errors.New("could not find requested_cpu/requested_memory columns")
+		}
 		for i := 0; i < maxRows; i++ {
-			row, err := r.Read()
+			row, err := csvr.Read()
 			if err != nil {
 				break
 			}
-			// Example: CPU in millicores, memory in MB
-			cpu, _ := strconv.ParseFloat(row[9], 64)
-			mem, _ := strconv.ParseFloat(row[10], 64)
+			cpu, _ := strconv.ParseFloat(row[cpuIdx], 64)
+			mem, _ := strconv.ParseFloat(row[memIdx], 64)
 			if cpu == 0 && mem == 0 {
 				continue
 			}
@@ -91,16 +125,26 @@ func LoadWorkloadsFromTrace(tracePath string, source TraceSource, maxRows int) (
 			})
 		}
 	case TraceAzure:
-		// Azure trace: CSV, columns: vCPUs, memoryGB, ...
-		r := csv.NewReader(f)
-		_, _ = r.Read() // skip header
+		// Azure trace: columns: vCPUs, memoryGB, ...
+		cpuIdx, memIdx := -1, -1
+		for i, col := range header {
+			if strings.Contains(strings.ToLower(col), "vcpu") {
+				cpuIdx = i
+			}
+			if strings.Contains(strings.ToLower(col), "memory") {
+				memIdx = i
+			}
+		}
+		if cpuIdx == -1 || memIdx == -1 {
+			return nil, errors.New("could not find vCPU/memory columns")
+		}
 		for i := 0; i < maxRows; i++ {
-			row, err := r.Read()
+			row, err := csvr.Read()
 			if err != nil {
 				break
 			}
-			cpu, _ := strconv.Atoi(row[0])
-			mem, _ := strconv.ParseFloat(row[1], 64)
+			cpu, _ := strconv.Atoi(row[cpuIdx])
+			mem, _ := strconv.ParseFloat(row[memIdx], 64)
 			if cpu == 0 && mem == 0 {
 				continue
 			}
@@ -110,16 +154,26 @@ func LoadWorkloadsFromTrace(tracePath string, source TraceSource, maxRows int) (
 			})
 		}
 	case TraceAlibaba:
-		// Alibaba trace: CSV, columns: ... cpu, mem, ...
-		r := csv.NewReader(f)
-		_, _ = r.Read() // skip header
+		// Alibaba trace: columns: ... cpu, mem, ...
+		cpuIdx, memIdx := -1, -1
+		for i, col := range header {
+			if strings.ToLower(col) == "cpu" {
+				cpuIdx = i
+			}
+			if strings.ToLower(col) == "mem" {
+				memIdx = i
+			}
+		}
+		if cpuIdx == -1 || memIdx == -1 {
+			return nil, errors.New("could not find cpu/mem columns")
+		}
 		for i := 0; i < maxRows; i++ {
-			row, err := r.Read()
+			row, err := csvr.Read()
 			if err != nil {
 				break
 			}
-			cpu, _ := strconv.Atoi(row[2])
-			mem, _ := strconv.ParseFloat(row[3], 64)
+			cpu, _ := strconv.Atoi(row[cpuIdx])
+			mem, _ := strconv.ParseFloat(row[memIdx], 64)
 			if cpu == 0 && mem == 0 {
 				continue
 			}

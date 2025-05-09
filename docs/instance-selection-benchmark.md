@@ -107,3 +107,23 @@ Naive: VMs=9, Cost=1.80/hr
 - Use the provided `RunTraceSimulation` function to benchmark with different public datasets (Google, Azure, Alibaba).
 - Add or update your Azure SKU JSON file to match your region or requirements.
 - Document and visualize results to demonstrate the benefits of the new selection logic.
+
+## Fetching Azure SKU Data
+
+To fetch and preprocess Azure VM SKU data for simulation, use the provided script:
+
+```bash
+python3 scripts/fetch_azure_skus.py > azure_skus.json
+```
+
+This will create a `azure_skus.json` file suitable for use with the simulation.
+
+## Running the Simulation CLI
+
+To run the simulation with a real trace and your SKU file:
+
+```bash
+go run ./cmd/instance-selection-sim/ -trace google -sku azure_skus.json -max 1000
+```
+
+You can also use `-trace azure` or `-trace alibaba` for other datasets.
