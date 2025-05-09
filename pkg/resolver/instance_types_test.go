@@ -40,3 +40,44 @@ func TestSelectBestInstance(t *testing.T) {
 		t.Errorf("Expected best candidate with Name B, got %v", best.Name)
 	}
 }
+
+// New: Test CPU-optimized and Memory-optimized strategies
+func TestSelectBestInstance_CPUOptimized(t *testing.T) {
+	candidates := []AzureInstanceSpec{
+		{Name: "cpu1", VCpus: 16, MemoryGiB: 16, PricePerHour: 0.4},
+		{Name: "mem1", VCpus: 4, MemoryGiB: 32, PricePerHour: 0.4},
+	}
+	workload := WorkloadProfile{CPURequirements: 8, MemoryRequirements: 8}
+	best := candidates[0]
+	bestScore := ScoreInstance(candidates[0], workload, StrategyCPUIntensive)
+	for _, c := range candidates[1:] {
+		score := ScoreInstance(c, workload, StrategyCPUIntensive)
+		if score > bestScore {
+			best = c
+			bestScore = score
+		}
+	}
+	if best.Name != "cpu1" {
+		t.Errorf("Expected cpu1 for CPU-optimized, got %v", best.Name)
+	}
+}
+
+func TestSelectBestInstance_MemoryOptimized(t *testing.T) {
+	candidates := []AzureInstanceSpec{
+		{Name: "cpu1", VCpus: 16, MemoryGiB: 16, PricePerHour: 0.4},
+		{Name: "mem1", VCpus: 4, MemoryGiB: 32, PricePerHour: 0.4},
+	}
+	workload := WorkloadProfile{CPURequirements: 2, MemoryRequirements: 24}
+	best := candidates[0]
+	bestScore := ScoreInstance(candidates[0], workload, StrategyMemoryIntensive)
+	for _, c := range candidates[1:] {
+		score := ScoreInstance(c, workload, StrategyMemoryIntensive)
+		if score > bestScore {
+			best = c
+			bestScore = score
+		}
+	}
+	if best.Name != "mem1" {
+		t.Errorf("Expected mem1 for Memory-optimized, got %v", best.Name)
+	}
+}
