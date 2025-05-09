@@ -1,45 +1,42 @@
 package resolver_test
 
 import (
-    "testing"
-    "github.com/Azure/karpenter-provider-azure/pkg/resolver"
+	"testing"
+
+	. "github.com/Azure/karpenter-provider-azure/pkg/resolver"
 )
 
-
-
-
-
 func TestComputeFit(t *testing.T) {
-    vm := resolver.VMType{VCpuCapacity: 8, MemoryCapacity: 32}
-    workload := resolver.WorkloadProfile{CPURequirements: 4, MemoryRequirements: 16}
-    fit := resolver.ComputeFit(vm, workload)
-    if fit < 0.99 || fit > 1.0 {
-        t.Errorf("Expected fit ~1.0, got %v", fit)
-    }
+	vm := AzureInstanceSpec{VCpus: 8, MemoryGiB: 32}
+	workload := WorkloadProfile{CPURequirements: 4, MemoryRequirements: 16}
+	fit := ComputeFit(vm, workload)
+	if fit < 0.99 || fit > 1.0 {
+		t.Errorf("Expected fit ~1.0, got %v", fit)
+	}
 }
 
-func TestScoreVM(t *testing.T) {
-    vm := resolver.VMType{
-        PricePerVCpu:   0.1,
-        PricePerGiB:    0.2,
-        VCpuCapacity:   8,
-        MemoryCapacity: 32,
-    }
-    workload := resolver.WorkloadProfile{CPURequirements: 4, MemoryRequirements: 16}
-    score := resolver.ScoreVM(vm, workload)
-    if score <= 0 {
-        t.Errorf("Expected positive score, got %v", score)
-    }
+func TestScoreInstance(t *testing.T) {
+	vm := AzureInstanceSpec{
+		Name:        "Standard_D4_v4",
+		VCpus:       8,
+		MemoryGiB:   32,
+		PricePerHour: 0.2,
+	}
+	workload := WorkloadProfile{CPURequirements: 4, MemoryRequirements: 16}
+	score := ScoreInstance(vm, workload, StrategyGeneralPurpose)
+	if score <= 0 {
+		t.Errorf("Expected positive score, got %v", score)
+	}
 }
 
-func TestSelectBestVM(t *testing.T) {
-    candidates := []resolver.VMType{
-        resolver.VMType{PricePerVCpu: 0.1, PricePerGiB: 0.2, VCpuCapacity: 8, MemoryCapacity: 32},
-        resolver.VMType{PricePerVCpu: 0.2, PricePerGiB: 0.3, VCpuCapacity: 4, MemoryCapacity: 16},
-    }
-    workload := resolver.WorkloadProfile{CPURequirements: 4, MemoryRequirements: 16}
-    best := resolver.SelectBestVM(candidates, workload)
-    if best.PricePerVCpu != 0.1 {
-        t.Errorf("Expected best candidate with PricePerVCpu 0.1, got %v", best.PricePerVCpu)
-    }
+func TestSelectBestInstance(t *testing.T) {
+	candidates := []AzureInstanceSpec{
+		{Name: "A", VCpus: 8, MemoryGiB: 32, PricePerHour: 0.2},
+		{Name: "B", VCpus: 4, MemoryGiB: 16, PricePerHour: 0.1},
+	}
+	workload := WorkloadProfile{CPURequirements: 4, MemoryRequirements: 16}
+	best := SelectBestInstance(candidates, workload)
+	if best.Name != "B" {
+		t.Errorf("Expected best candidate with Name B, got %v", best.Name)
+	}
 }
