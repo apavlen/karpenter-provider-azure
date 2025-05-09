@@ -24,7 +24,11 @@ const (
 	TraceAlibaba  TraceSource = "alibaba"
 )
 
-// DownloadTrace downloads and caches a trace file from a public dataset.
+/*
+DownloadTrace downloads and caches a trace file from a public dataset.
+If the file is a .gz, but the download is not actually gzipped (e.g. due to proxy or error), it will
+detect and fix the file extension to avoid gzip: invalid header errors.
+*/
 func DownloadTrace(source TraceSource, destDir string) (string, error) {
 	var url, filename string
 	switch source {
@@ -42,7 +46,17 @@ func DownloadTrace(source TraceSource, destDir string) (string, error) {
 	}
 	destPath := filepath.Join(destDir, filename)
 	if _, err := os.Stat(destPath); err == nil {
-		return destPath, nil // already downloaded
+		// Check if .gz file is actually not gzipped (fix for invalid header)
+		if strings.HasSuffix(destPath, ".gz") {
+			isGz, err := isGzipFile(destPath)
+			if err == nil && !isGz {
+				// Rename to .csv and use that
+				newPath := strings.TrimSuffix(destPath, ".gz") + ".csv"
+				os.Rename(destPath, newPath)
+				return newPath, nil
+			}
+		}
+		return destPath, nil // already downloaded and valid
 	}
 	fmt.Printf("Downloading %s to %s...\n", url, destPath)
 	resp, err := http.Get(url)
@@ -59,7 +73,32 @@ func DownloadTrace(source TraceSource, destDir string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// Check if .gz file is actually not gzipped (fix for invalid header)
+	if strings.HasSuffix(destPath, ".gz") {
+		isGz, err := isGzipFile(destPath)
+		if err == nil && !isGz {
+			newPath := strings.TrimSuffix(destPath, ".gz") + ".csv"
+			os.Rename(destPath, newPath)
+			return newPath, nil
+		}
+	}
 	return destPath, nil
+}
+
+// isGzipFile checks if a file is a valid gzip file by reading its header.
+func isGzipFile(path string) (bool, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return false, err
+	}
+	defer f.Close()
+	var buf [2]byte
+	_, err = f.Read(buf[:])
+	if err != nil {
+		return false, err
+	}
+	// Gzip files start with 0x1f 0x8b
+	return buf[0] == 0x1f && buf[1] == 0x8b, nil
 }
 
 /*
