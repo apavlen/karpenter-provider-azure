@@ -73,80 +73,36 @@ To make the simulation realistic, use real-world workload traces:
 
 ## Example: Running the Simulation
 
-You can run the simulation from a Go main or test file like this:
-
-```go
-import "github.com/Azure/karpenter-provider-azure/pkg/resolver"
-
-func main() {
-    // Download, cache, preprocess, and simulate with Google trace and a local Azure SKU file
-    err := resolver.RunTraceSimulation(resolver.TraceGoogle, "azure_skus.json", 1000)
-    if err != nil {
-        panic(err)
-    }
-}
-```
-
-The output will look like:
-
-```
-Downloading https://storage.googleapis.com/clusterdata-2019-2/clusterdata-2019-2-task-events.csv.gz to .trace_cache/google_clusterdata_2019.csv.gz...
-Parsing workloads from .trace_cache/google_clusterdata_2019.csv.gz...
-Loading Azure instance specs from azure_skus.json...
-Simulating bin-packing with new algorithm...
-Simulating bin-packing with naive algorithm...
-Results:
-New algorithm: VMs=5, Cost=1.20/hr
-  Avg CPU utilization: 85.0%, Avg Mem utilization: 80.0%
-Naive: VMs=9, Cost=1.80/hr
-  Avg CPU utilization: 45.0%, Avg Mem utilization: 40.0%
-```
-
-## Next Steps
-
-- Use the provided `RunTraceSimulation` function to benchmark with different public datasets (Google, Azure, Alibaba).
-- Add or update your Azure SKU JSON file to match your region or requirements.
-- Document and visualize results to demonstrate the benefits of the new selection logic.
-
-## Fetching Azure SKU Data
-
-To fetch and preprocess Azure VM SKU data for simulation, use the provided script:
-
-```bash
-python3 scripts/fetch_azure_skus.py > azure_skus.json
-```
-
-This will create a `azure_skus.json` file suitable for use with the simulation.
-
-## Running the Simulation CLI
-
-To run the simulation with a real trace and your SKU file:
-
-```bash
-go run ./cmd/instance-selection-sim/ -trace google -sku azure_skus.json -max 1000
-```
-
-You can also use `-trace azure` or `-trace alibaba` for other datasets.
-
-## Visualizing and Exporting Results
-
-To further analyze and visualize the results, you can export the simulation output to a CSV file for plotting or reporting.  
-The CLI supports an optional `-out results.csv` flag to write a summary of the simulation results.
-
-Example:
+You can run the simulation and get results as follows:
 
 ```bash
 go run ./cmd/instance-selection-sim/ -trace google -sku azure_skus.json -max 1000 -out results.csv
 ```
 
-The CSV will contain:
+- This will run the simulation using the Google trace and your Azure SKU file.
+- The results will be written to `results.csv` in the current directory.
 
-| Strategy      | VMs Used | Total Cost | Avg CPU Util (%) | Avg Mem Util (%) |
-|---------------|----------|------------|------------------|------------------|
-| NewAlgorithm  | 5        | 1.20       | 85.0             | 80.0             |
-| Naive         | 9        | 1.80       | 45.0             | 40.0             |
+The output will look like:
 
-You can then use tools like Excel, Google Sheets, or Python/pandas/matplotlib to visualize the efficiency gains.
+```
+Results:
+New algorithm: VMs=5, Cost=1.20/hr
+  Avg CPU utilization: 85.0%, Avg Mem utilization: 80.0%
+Naive: VMs=9, Cost=1.80/hr
+  Avg CPU utilization: 45.0%, Avg Mem utilization: 40.0%
+Results written to results.csv
+```
+
+You can then plot the results with:
+
+```bash
+python3 scripts/plot_simulation_results.py results.csv
+```
+
+- The `results.csv` file will contain a summary table with the results for each strategy.
+- The plot script will generate bar charts comparing VMs used, total cost, and utilization for each strategy.
+
+The `results.csv` file is your main output artifact for further analysis and visualization.
 
 ## Built-in Visualization
 
