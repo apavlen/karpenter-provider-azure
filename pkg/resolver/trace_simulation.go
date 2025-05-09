@@ -45,6 +45,13 @@ func DownloadTrace(source TraceSource, destDir string) (string, error) {
 		return "", errors.New("unknown trace source")
 	}
 	destPath := filepath.Join(destDir, filename)
+	// If a .csv version exists, prefer it (fix for previous renames)
+	if strings.HasSuffix(destPath, ".gz") {
+		csvPath := strings.TrimSuffix(destPath, ".gz") + ".csv"
+		if _, err := os.Stat(csvPath); err == nil {
+			return csvPath, nil
+		}
+	}
 	if _, err := os.Stat(destPath); err == nil {
 		// Check if .gz file is actually not gzipped (fix for invalid header)
 		if strings.HasSuffix(destPath, ".gz") {
