@@ -119,3 +119,20 @@ This document describes the design for an extensible Azure instance type selecti
 2. Implement InstanceSelector interface and basic strategies (CPU, memory, general).
 3. Add simulation tooling and tests.
 4. Prepare for real trace integration.
+# Azure Instance Selection Algorithm Design
+
+> **Azure-specific requirements and constraints considered in this implementation:**
+>
+> - **Trusted Launch (TTs):** Support for confidential/secure VM boot (TPM, vTPM, Secure Boot).
+> - **Accelerated Networking:** High network throughput/low latency.
+> - **MaxPods:** Maximum number of pods per VM SKU.
+> - **UltraSSDEnabled:** Support for Ultra SSD disks.
+> - **Proximity Placement Groups:** For low-latency requirements.
+> - **Regional Quotas:** vCPU quotas per family/region.
+> - **Spot Eviction Policy:** Spot VMs have different eviction policies.
+> - **Confidential Computing:** Support for confidential workloads.
+> - **Ephemeral OS Disk:** Fast boot support.
+> - **Availability Zones:** Not all SKUs are available in all zones.
+> - **GPU/FPGA:** Specific GPU/FPGA types for workloads.
+>
+> These are modeled as fields and filter functions in the code, and can be extended as needed.

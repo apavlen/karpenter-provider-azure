@@ -2,9 +2,28 @@ package resolver
 
 import (
 	"strings"
+	"fmt"
 )
 
-// AzureInstanceSpec describes an Azure VM type and its capabilities.
+/*
+AzureInstanceSpec describes an Azure VM type and its capabilities.
+
+Azure-specific requirements and constraints to consider:
+- Trusted Launch (TTs): Azure supports Trusted Launch for enhanced security (TPM, vTPM, Secure Boot).
+- Accelerated Networking: Some workloads require this for high network throughput/low latency.
+- MaxPods: Some VM SKUs have a maximum number of pods they support.
+- UltraSSDEnabled: Some VMs support Ultra SSD disks.
+- Proximity Placement Groups: For low-latency requirements.
+- Regional Quotas: vCPU quotas per family/region.
+- Spot Eviction Policy: Spot VMs have different eviction policies.
+- Confidential Computing: Some VMs support confidential workloads.
+- Ephemeral OS Disk: Some VMs support ephemeral OS disks for faster boot.
+- Availability Zones: Not all SKUs are available in all zones.
+- GPU/FPGA: Some workloads require specific GPU/FPGA types.
+
+These can be modeled as additional fields and filter functions.
+*/
+
 type AzureInstanceSpec struct {
 	Name                   string
 	VCpus                  int
@@ -20,10 +39,24 @@ type AzureInstanceSpec struct {
 	NestedVirtualization   bool
 	SpotSupported          bool
 	ConfidentialComputing  bool
+	TrustedLaunch          bool // TTs: Trusted Launch support
+	AcceleratedNetworking  bool
+	MaxPods                int
+	UltraSSDEnabled        bool
+	ProximityPlacement     bool
 	// Add more fields as needed for filtering (e.g., AcceleratedNetworking, MaxPods, etc.)
 }
 
-// WorkloadProfile describes the requirements for a workload (pod).
+/*
+WorkloadProfile describes the requirements for a workload (pod).
+
+Capabilities map can be used for Azure-specific requirements, e.g.:
+- TrustedLaunch: "true"
+- AcceleratedNetworking: "true"
+- MaxPods: "30"
+- UltraSSDEnabled: "true"
+- ProximityPlacement: "true"
+*/
 type WorkloadProfile struct {
 	CPURequirements    int
 	MemoryRequirements float64
@@ -35,6 +68,7 @@ type WorkloadProfile struct {
 	RequireNestedVirt  bool
 	RequireSpot        bool
 	RequireConfidential bool
+	Capabilities       map[string]string // Azure-specific requirements
 	// Add more fields as needed for filtering (e.g., labels, taints, etc.)
 }
 
@@ -125,6 +159,33 @@ func FilterByEphemeralOS(inst AzureInstanceSpec, workload WorkloadProfile) bool 
 	return inst.EphemeralOSDisk
 }
 
+func FilterByTrustedLaunch(inst AzureInstanceSpec, workload WorkloadProfile) bool {
+	// If workload requires Trusted Launch, only allow VMs that support it
+	if val, ok := workload.Capabilities["TrustedLaunch"]; ok && val == "true" {
+		return inst.TrustedLaunch
+	}
+	return true
+}
+
+func FilterByAcceleratedNetworking(inst AzureInstanceSpec, workload WorkloadProfile) bool {
+	if val, ok := workload.Capabilities["AcceleratedNetworking"]; ok && val == "true" {
+		return inst.AcceleratedNetworking
+	}
+	return true
+}
+
+func FilterByMaxPods(inst AzureInstanceSpec, workload WorkloadProfile) bool {
+	if val, ok := workload.Capabilities["MaxPods"]; ok {
+		// Parse value as int
+		var req int
+		_, err := fmt.Sscanf(val, "%d", &req)
+		if err == nil && inst.MaxPods > 0 {
+			return inst.MaxPods >= req
+		}
+	}
+	return true
+}
+
 // Add more filters as needed (e.g., spot, confidential, family, etc.)
 
 // RankInstanceTypes sorts instance types by score (descending).
@@ -182,6 +243,9 @@ func selectWithStrategy(candidates []AzureInstanceSpec, workload WorkloadProfile
 		FilterByZone,
 		FilterByGPU,
 		FilterByEphemeralOS,
+		FilterByTrustedLaunch,
+		FilterByAcceleratedNetworking,
+		FilterByMaxPods,
 		// Add more filters here
 	}
 	filtered := FilterInstanceTypes(candidates, workload, filters...)
