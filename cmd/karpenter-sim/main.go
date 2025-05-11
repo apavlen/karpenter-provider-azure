@@ -5,7 +5,7 @@ import (
 	"math/rand"
 	"time"
 
-	"yourmodule/pkg/resolver"
+	"pkg/resolver"
 )
 
 func main() {
