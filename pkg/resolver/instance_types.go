@@ -8,6 +8,24 @@ import (
 /*
 AzureInstanceSpec describes an Azure VM type and its capabilities.
 
+Comparison to AWS Karpenter Instance Selection Logic:
+
+- This repo's instance selection logic is conceptually similar to AWS Karpenter's:
+  - Both filter instance types based on workload requirements (zone, GPU, ephemeral disk, etc).
+  - Both use a scoring/ranking function to select the "best" instance from the filtered set.
+  - Both support pluggable strategies (general, CPU, memory, IO intensive).
+  - Both support bin-packing for multi-workload scheduling.
+
+- Differences:
+  - AWS Karpenter's implementation is more mature, with more advanced scoring, weighting, and support for constraints like interruption rates, launch templates, and capacity type (spot/on-demand).
+  - AWS Karpenter uses a more sophisticated sorting (with sort.Slice and stable sort), while this repo uses a simple selection sort for demonstration.
+  - This repo's scoring and filtering logic is extensible but currently simpler and more Azure-specific (e.g., Trusted Launch, Accelerated Networking).
+  - AWS Karpenter integrates with AWS APIs for real-time instance availability, pricing, and capacity; this repo would need Azure-specific integrations for parity.
+
+- Summary:
+  - The high-level approach (filter, score, select) is the same.
+  - This repo is a good starting point and is structurally similar, but would need further enhancements for full feature parity with AWS Karpenter.
+
 Azure-specific requirements and constraints to consider:
 - Trusted Launch (TTs): Azure supports Trusted Launch for enhanced security (TPM, vTPM, Secure Boot).
 - Accelerated Networking: Some workloads require this for high network throughput/low latency.
