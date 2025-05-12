@@ -84,6 +84,15 @@ type AzureInstanceSpec struct {
 /*
 WorkloadProfile describes the requirements for a workload (pod).
 
+Where does WorkloadProfile data come from?
+
+- In production, WorkloadProfile data is typically derived from Kubernetes Pod specs, NodePool/NodeClass configuration, or scheduling requests.
+  - For example, CPU and memory requirements are taken from pod resource requests/limits.
+  - GPU, zone, and other requirements may come from pod annotations, labels, or higher-level scheduling policies.
+  - Capabilities map can be populated from pod or node selectors, or custom scheduling extensions.
+
+- In tests and benchmarks (such as in instance_types_benchmark_test.go), WorkloadProfile data is generated synthetically using helper functions like randomWorkloadProfile().
+
 Capabilities map can be used for Azure-specific requirements, e.g.:
 - TrustedLaunch: "true"
 - AcceleratedNetworking: "true"
