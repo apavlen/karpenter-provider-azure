@@ -78,6 +78,16 @@ def main():
 
     # Try to map expected columns to actual columns (case-insensitive, ignore underscores)
     expected_cols = ["vm_id", "start_time", "end_time", "cpu_avg", "mem_avg", "vcpus", "memory_gib", "workload_type"]
+
+    # Heuristic: If the columns look like hashes or encoded, try to use the first row as header
+    if all(len(str(col)) > 20 for col in df.columns[:5]):
+        log("Detected encoded or incorrect header in vmtable.csv.gz, attempting to reload with header from first row...")
+        try:
+            df = pd.read_csv(vmtable_path, compression="gzip", header=1, nrows=args.limit)
+        except Exception as e:
+            log(f"ERROR: Failed to reload {vmtable_path} with header from first row: {e}")
+            sys.exit(1)
+
     col_map = {}
     for exp in expected_cols:
         found = None
