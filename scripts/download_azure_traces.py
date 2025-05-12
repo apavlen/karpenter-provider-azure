@@ -24,6 +24,19 @@ import requests
 from tqdm import tqdm
 
 # URLs for the 2020 VM deployment and usage data (update if needed)
+# NOTE: As of 2024, these direct links may no longer work or may require special access.
+# Microsoft has restricted public access to the full Azure VM traces due to privacy and compliance.
+# To request access or get the latest instructions, visit:
+#   https://github.com/Azure/AzurePublicDataset
+#   https://github.com/Azure/AzurePublicDataset/blob/master/AzurePublicDatasetLinksV2.txt
+#   https://www.microsoft.com/en-us/research/project/azure-vm-placement-trace/
+#
+# Steps to get the traces:
+# 1. Go to the AzurePublicDataset GitHub repo and read the README and issues for current access instructions.
+# 2. If required, fill out the request form or email Microsoft Research as described in the repo.
+# 3. Once you have access, download the files manually or update the URLs below with your authorized links.
+# 4. Place the files in the expected directory (e.g., data/azure_traces/) for use with the preprocessing script.
+
 VM_DEPLOYMENTS_URL = "https://azureopendatastorage.blob.core.windows.net/azurepublicdataset/vm_deployments_aggregate_2020.csv"
 VM_USAGE_URL = "https://azureopendatastorage.blob.core.windows.net/azurepublicdataset/vm_cpu_mem_2020.csv"
 
@@ -70,6 +83,10 @@ def main():
     # Download VM deployments
     deployments_path = os.path.join(args.outdir, "vm_deployments_aggregate_2020.csv")
     if not os.path.exists(deployments_path):
+        print(
+            "\nNOTE: If this download fails or the file is XML, you likely need to request access to the Azure VM traces.\n"
+            "See the comments at the top of this script for instructions.\n"
+        )
         download_file(VM_DEPLOYMENTS_URL, deployments_path)
     else:
         print(f"File already exists: {deployments_path}")
@@ -77,6 +94,10 @@ def main():
     # Download VM usage
     usage_path = os.path.join(args.outdir, "vm_cpu_mem_2020.csv")
     if not os.path.exists(usage_path):
+        print(
+            "\nNOTE: If this download fails or the file is XML, you likely need to request access to the Azure VM traces.\n"
+            "See the comments at the top of this script for instructions.\n"
+        )
         download_file(VM_USAGE_URL, usage_path)
     else:
         print(f"File already exists: {usage_path}")
