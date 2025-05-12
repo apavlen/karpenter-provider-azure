@@ -3,6 +3,7 @@ package resolver
 import (
 	"strings"
 	"fmt"
+	"sort"
 )
 
 /*
@@ -419,17 +420,18 @@ func min(a, b float64) float64 {
 // BinPackWorkloads assigns workloads to VMs using a first-fit decreasing bin-packing algorithm.
 // Returns a PackingResult with the list of VMs and their assigned workloads.
 func BinPackWorkloads(workloads WorkloadSet, candidates []AzureInstanceSpec, strategy SelectionStrategy) PackingResult {
-	// Sort workloads by descending CPU+Memory demand (naive, can be improved)
+	// Sort workloads by descending CPU+Memory demand (efficient)
 	sorted := make(WorkloadSet, len(workloads))
 	copy(sorted, workloads)
-	// Simple bubble sort for demonstration
-	for i := 0; i < len(sorted); i++ {
-		for j := i + 1; j < len(sorted); j++ {
-			if sorted[j].CPURequirements+int(sorted[j].MemoryRequirements) > sorted[i].CPURequirements+int(sorted[i].MemoryRequirements) {
-				sorted[i], sorted[j] = sorted[j], sorted[i]
-			}
-		}
-	}
+	// Use sort.Slice for efficiency
+	// Sorting by (CPURequirements + MemoryRequirements) descending
+	// (MemoryRequirements is float64, so we cast to float64 for sum)
+	// If you want to weight CPU/Memory differently, adjust here.
+	// This is much faster than bubble sort for large slices.
+	sort.Slice(sorted, func(i, j int) bool {
+		return float64(sorted[i].CPURequirements)+sorted[i].MemoryRequirements >
+			float64(sorted[j].CPURequirements)+sorted[j].MemoryRequirements
+	})
 
 	var result PackingResult
 	unpacked := make([]bool, len(sorted))
