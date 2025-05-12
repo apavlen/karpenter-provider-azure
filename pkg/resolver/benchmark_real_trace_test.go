@@ -98,16 +98,51 @@ func BenchmarkInstanceSelection_RealTrace(b *testing.B) {
 	}
 }
 
-// Benchmark bin-packing for the full trace
+type BinPackingAlgorithm func(workloads WorkloadSet, candidates []AzureInstanceSpec, strategy SelectionStrategy) PackingResult
+
+// First-fit decreasing (current default)
+func BinPackWorkloadsFFD(workloads WorkloadSet, candidates []AzureInstanceSpec, strategy SelectionStrategy) PackingResult {
+	return BinPackWorkloads(workloads, candidates, strategy)
+}
+
+// Naive one-workload-per-VM (worst case, for comparison)
+func BinPackWorkloadsNaiveAlgo(workloads WorkloadSet, candidates []AzureInstanceSpec, strategy SelectionStrategy) PackingResult {
+	var result PackingResult
+	for _, w := range workloads {
+		bestVM, _ := selectWithStrategy(candidates, w, strategy)
+		if bestVM.Name != "" {
+			result.VMs = append(result.VMs, PackedVM{
+				InstanceType: bestVM,
+				Workloads:    []WorkloadProfile{w},
+			})
+		}
+	}
+	return result
+}
+
+// Benchmark bin-packing for the full trace, comparing algorithms
 func BenchmarkBinPacking_RealTrace(b *testing.B) {
 	workloads, err := loadWorkloadsFromJSON("workloads_preprocessed.json")
 	if err != nil {
 		b.Fatalf("failed to load workloads: %v", err)
 	}
 	instances := dummyInstanceTypes()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_ = BinPackWorkloads(workloads, instances, StrategyGeneralPurpose)
+
+	algorithms := []struct {
+		name string
+		fn   BinPackingAlgorithm
+	}{
+		{"FirstFitDecreasing", BinPackWorkloadsFFD},
+		{"NaiveOnePerVM", BinPackWorkloadsNaiveAlgo},
+	}
+
+	for _, algo := range algorithms {
+		b.Run(algo.name, func(b *testing.B) {
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				_ = algo.fn(workloads, instances, StrategyGeneralPurpose)
+			}
+		})
 	}
 }
 
