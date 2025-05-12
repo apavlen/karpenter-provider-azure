@@ -7,6 +7,28 @@ import (
 	"time"
 )
 
+/*
+Benchmark Results (example run):
+
+goos: linux
+goarch: amd64
+pkg: github.com/Azure/karpenter-provider-azure/pkg/resolver
+cpu: Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+BenchmarkInstanceSelection-8   	     140	   9056469 ns/op	  137050 B/op	      10 allocs/op
+PASS
+ok  	github.com/Azure/karpenter-provider-azure/pkg/resolver	2.137s
+
+With -benchmem:
+
+goos: linux
+goarch: amd64
+pkg: github.com/Azure/karpenter-provider-azure/pkg/resolver
+cpu: Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
+BenchmarkInstanceSelection-8   	     148	   9357721 ns/op	  153163 B/op	      10 allocs/op
+PASS
+ok  	github.com/Azure/karpenter-provider-azure/pkg/resolver	2.208s
+*/
+
 func randomInstanceSpec(i int) AzureInstanceSpec {
 	return AzureInstanceSpec{
 		Name:                  fmt.Sprintf("Standard_D%d_v4", i),
