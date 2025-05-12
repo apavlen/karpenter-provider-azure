@@ -44,6 +44,21 @@ def download_file(url, out_path, chunk_size=1024*1024):
             if chunk:
                 file.write(chunk)
                 bar.update(len(chunk))
+    # After download, print the first few lines to help debug
+    print(f"First 3 lines of {out_path}:")
+    with open(out_path, "r", encoding="utf-8", errors="replace") as f:
+        for i in range(3):
+            line = f.readline()
+            if not line:
+                break
+            print(line.strip())
+    # If the file starts with "<?xml", warn the user
+    with open(out_path, "r", encoding="utf-8", errors="replace") as f:
+        first_line = f.readline()
+        if first_line.startswith("<?xml"):
+            print(f"WARNING: {out_path} appears to be an XML error file, not a CSV.")
+            print("Please check the AzurePublicDataset repo for updated links or access instructions.")
+            print("See: https://github.com/Azure/AzurePublicDataset")
 
 def main():
     parser = argparse.ArgumentParser()
