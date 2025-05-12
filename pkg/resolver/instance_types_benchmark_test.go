@@ -35,6 +35,13 @@ For more realistic benchmarking and profiling, you can use traces from:
 - Public datasets such as the Alibaba Cluster Trace Program (https://github.com/alibaba/clusterdata), Google Borg traces, or Microsoft Azure VM traces.
 - Production cluster pod specs (exported as JSON/YAML).
 
+Microsoft Azure VM traces suitable for benchmarking:
+- Microsoft has released the "Azure Public Dataset" (VM and workload traces) as part of the MSR (Microsoft Research) Open Data initiative.
+- The most relevant dataset is the "Azure VM Placement Trace" available at: https://github.com/Azure/AzurePublicDataset
+  - Direct link: https://github.com/Azure/AzurePublicDataset/tree/master/vm
+  - Paper describing the dataset: https://www.microsoft.com/en-us/research/project/azure-vm-placement-trace/
+- These traces contain anonymized VM allocation, resource usage, and placement events from production Azure clusters.
+
 To use a real trace, parse the trace file and convert each workload event into a WorkloadProfile struct.
 This allows benchmarking the instance selection logic under realistic, production-like load and diversity.
 */
