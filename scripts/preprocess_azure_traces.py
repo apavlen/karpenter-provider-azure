@@ -29,10 +29,11 @@ import json
 from tqdm import tqdm
 import requests
 import sys
+import glob
 
-# Azure Public Dataset URLs (2020)
-VM_DEPLOYMENTS_URL = "https://azurepublicdatasetv2.blob.core.windows.net/azurepublicdatasetv2/azurepublicdataset/vm_deployments_aggregate_2020.csv"
-VM_USAGE_URL = "https://azurepublicdatasetv2.blob.core.windows.net/azurepublicdatasetv2/azurepublicdataset/vm_cpu_mem_2020.csv"
+# Correct file names for Azure Public Dataset v2
+DEPLOYMENTS_FILE = "trace_data/deployments/deployments.csv.gz"
+USAGE_GLOB = "trace_data/vm_cpu_readings/vm_cpu_readings-file-*.csv.gz"
 
 # Comprehensive mapping from Azure VM size to (vCPUs, MemoryGiB)
 AZURE_VM_SIZE_MAP = {
@@ -126,29 +127,28 @@ def load_vm_size_map():
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--indir', type=str, default='data/azure_traces', help='Input directory')
+    parser.add_argument('--indir', type=str, default='trace_data', help='Input directory (root of Azure trace)')
     parser.add_argument('--out', type=str, default='workloads_preprocessed.json', help='Output file')
     parser.add_argument('--limit', type=int, default=None, help='Limit number of rows (for debugging)')
     args = parser.parse_args()
 
-    os.makedirs(args.indir, exist_ok=True)
+    # File paths
+    deployments_path = os.path.join(args.indir, "deployments", "deployments.csv.gz")
+    usage_glob = os.path.join(args.indir, "vm_cpu_readings", "vm_cpu_readings-file-*.csv.gz")
 
-    deployments_path = os.path.join(args.indir, "vm_deployments_aggregate_2020.csv")
-    usage_path = os.path.join(args.indir, "vm_cpu_mem_2020.csv")
-
-    # Download files if missing
-    ensure_file(deployments_path, VM_DEPLOYMENTS_URL)
-    ensure_file(usage_path, VM_USAGE_URL)
+    # Check files exist
+    if not os.path.exists(deployments_path):
+        log(f"ERROR: {deployments_path} not found. Please extract the Azure trace dataset as per documentation.")
+        sys.exit(1)
+    usage_files = sorted(glob.glob(usage_glob))
+    if not usage_files:
+        log(f"ERROR: No usage files found matching {usage_glob}")
+        sys.exit(1)
 
     # Load deployments
     log("Loading VM deployments...")
-    deployments = pd.read_csv(deployments_path, nrows=args.limit)
+    deployments = pd.read_csv(deployments_path, compression="gzip", nrows=args.limit)
     log(f"Deployment columns: {deployments.columns.tolist()}")
-    if len(deployments.columns) == 1 and deployments.columns[0].startswith("<?xml"):
-        log("ERROR: The deployments CSV file does not contain valid data. It may be an error XML.")
-        log(f"File content preview: {deployments.columns[0][:200]}")
-        log("Please check that the file was downloaded correctly and the URL is valid.")
-        sys.exit(1)
     expected_deploy_cols = ["vm_id", "vm_size", "start_time", "end_time", "resource_group"]
     deploy_col_map = detect_column(deployments, expected_deploy_cols)
     missing = [k for k, v in deploy_col_map.items() if v is None]
@@ -158,9 +158,20 @@ def main():
     deployments = deployments[[deploy_col_map[c] for c in expected_deploy_cols]]
     deployments.columns = expected_deploy_cols
 
-    # Load usage
-    log("Loading VM usage...")
-    usage = pd.read_csv(usage_path, nrows=args.limit)
+    # Load and concatenate all usage files
+    log("Loading and concatenating VM usage files...")
+    usage_chunks = []
+    total_rows = 0
+    for fpath in usage_files:
+        log(f"Reading {fpath}")
+        chunk = pd.read_csv(fpath, compression="gzip", nrows=args.limit)
+        usage_chunks.append(chunk)
+        total_rows += len(chunk)
+        if args.limit and total_rows >= args.limit:
+            break
+    usage = pd.concat(usage_chunks, ignore_index=True)
+    if args.limit:
+        usage = usage.iloc[:args.limit]
     log(f"Usage columns: {usage.columns.tolist()}")
     expected_usage_cols = ["vm_id", "timestamp", "cpu_usage", "mem_usage"]
     usage_col_map = detect_column(usage, expected_usage_cols)
@@ -177,6 +188,16 @@ def main():
     log("Merging deployments and usage data...")
     merged = pd.merge(usage, deployments, on="vm_id", how="inner")
 
+    # Filter: only keep usage records within the VM's lifetime
+    log("Filtering usage records to VM lifetime...")
+    merged = merged[
+        (merged["timestamp"] >= merged["start_time"]) &
+        (merged["timestamp"] <= merged["end_time"])
+    ]
+
+    # Deduplicate: keep only one usage record per (vm_id, timestamp)
+    merged = merged.drop_duplicates(subset=["vm_id", "timestamp"])
+
     # Convert to pod-like workload profiles
     log("Converting merged data to pod-like workload profiles...")
     workloads = []
@@ -186,7 +207,7 @@ def main():
         if vcpus is None:
             # Try to parse vCPU/mem from VM size string (e.g., Standard_D4_v3 -> 4 vCPUs, 16 GiB)
             import re
-            m = re.match(r"Standard_[A-Z]+(\d+)[a-z_]*_v\d+", vm_size)
+            m = re.match(r"Standard_[A-Z]+(\d+)[a-z_]*_v\d+", str(vm_size))
             if m:
                 try:
                     vcpus = int(m.group(1))
