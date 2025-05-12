@@ -132,18 +132,26 @@ def main():
     parser.add_argument('--limit', type=int, default=None, help='Limit number of rows (for debugging)')
     args = parser.parse_args()
 
-    # File paths
+    # Try both possible directory layouts for deployments file
     deployments_path = os.path.join(args.indir, "deployments", "deployments.csv.gz")
-    usage_glob = os.path.join(args.indir, "vm_cpu_readings", "vm_cpu_readings-file-*.csv.gz")
-
-    # Check files exist
     if not os.path.exists(deployments_path):
-        log(f"ERROR: {deployments_path} not found. Please extract the Azure trace dataset as per documentation.")
-        sys.exit(1)
+        # Try one more common layout: AzurePublicDataset-master/trace_data/deployments/deployments.csv.gz
+        alt_deployments_path = os.path.join(args.indir, "trace_data", "deployments", "deployments.csv.gz")
+        if os.path.exists(alt_deployments_path):
+            deployments_path = alt_deployments_path
+        else:
+            log(f"ERROR: {deployments_path} not found, and also not found at {alt_deployments_path}. Please extract the Azure trace dataset as per documentation.")
+            sys.exit(1)
+
+    # Try both possible directory layouts for usage files
+    usage_glob = os.path.join(args.indir, "vm_cpu_readings", "vm_cpu_readings-file-*.csv.gz")
     usage_files = sorted(glob.glob(usage_glob))
     if not usage_files:
-        log(f"ERROR: No usage files found matching {usage_glob}")
-        sys.exit(1)
+        alt_usage_glob = os.path.join(args.indir, "trace_data", "vm_cpu_readings", "vm_cpu_readings-file-*.csv.gz")
+        usage_files = sorted(glob.glob(alt_usage_glob))
+        if not usage_files:
+            log(f"ERROR: No usage files found matching {usage_glob} or {alt_usage_glob}")
+            sys.exit(1)
 
     # Load deployments
     log("Loading VM deployments...")
