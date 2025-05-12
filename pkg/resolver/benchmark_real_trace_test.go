@@ -3,6 +3,7 @@ package resolver
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"testing"
 	"fmt"
 )
@@ -19,8 +20,6 @@ type WorkloadJSON struct {
 	Labels            map[string]string  `json:"labels"`
 	Annotations       map[string]string  `json:"annotations"`
 }
-
-import "path/filepath"
 
 // Helper to load workloads_preprocessed.json and convert to []WorkloadProfile
 func loadWorkloadsFromJSON(path string) ([]WorkloadProfile, error) {
