@@ -20,11 +20,28 @@ type WorkloadJSON struct {
 	Annotations       map[string]string  `json:"annotations"`
 }
 
+import "path/filepath"
+
 // Helper to load workloads_preprocessed.json and convert to []WorkloadProfile
 func loadWorkloadsFromJSON(path string) ([]WorkloadProfile, error) {
+	// Try the provided path first
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, err
+		// If not found, try looking in parent directory and in testdata/
+		altPaths := []string{
+			filepath.Join("..", path),
+			filepath.Join("testdata", path),
+			filepath.Join("..", "testdata", path),
+		}
+		for _, alt := range altPaths {
+			f, err = os.Open(alt)
+			if err == nil {
+				break
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
 	}
 	defer f.Close()
 	var raw []WorkloadJSON
