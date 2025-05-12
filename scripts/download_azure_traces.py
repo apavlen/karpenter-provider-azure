@@ -28,8 +28,13 @@ VM_DEPLOYMENTS_URL = "https://azureopendatastorage.blob.core.windows.net/azurepu
 VM_USAGE_URL = "https://azureopendatastorage.blob.core.windows.net/azurepublicdataset/vm_cpu_mem_2020.csv"
 
 def download_file(url, out_path, chunk_size=1024*1024):
-    """Download a file with progress bar and chunking."""
+    """Download a file with progress bar and chunking. Handles 404 and XML error responses."""
     response = requests.get(url, stream=True)
+    if response.status_code != 200 or response.headers.get('content-type', '').startswith('application/xml'):
+        print(f"ERROR: Failed to download {url} (status {response.status_code})")
+        print("Response headers:", response.headers)
+        print("Response text:", response.text[:500])
+        raise RuntimeError(f"Failed to download {url}")
     total = int(response.headers.get('content-length', 0))
     with open(out_path, 'wb') as file, tqdm(
         desc=f"Downloading {os.path.basename(out_path)}",

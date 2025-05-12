@@ -55,6 +55,12 @@ def main():
     # Read without usecols to inspect columns if needed
     deployments = pd.read_csv(deployments_path, nrows=100000)
     print("Deployment columns:", deployments.columns.tolist())
+    # Check for XML error (AzurePublicDataset sometimes returns XML error if file not found)
+    if len(deployments.columns) == 1 and deployments.columns[0].startswith("<?xml"):
+        print("ERROR: The deployments CSV file does not contain valid data. It may be an error XML.")
+        print("File content preview:", deployments.columns[0][:200])
+        print("Please check that the file was downloaded correctly and the URL is valid.")
+        exit(1)
     # Try to find the correct column names (case-insensitive)
     expected_cols = ["vm_id", "vm_size", "start_time", "end_time", "resource_group"]
     actual_cols = [c.lower() for c in deployments.columns]
