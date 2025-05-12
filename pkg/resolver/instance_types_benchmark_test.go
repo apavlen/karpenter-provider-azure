@@ -92,6 +92,7 @@ func BenchmarkInstanceSelectionWithRealWorkloads(b *testing.B) {
 		"MemOptimized": &MemoryStrategySelector{},
 	}
 
+	b.ResetTimer()
 	for name, selector := range strategies {
 		b.Run(name, func(b *testing.B) {
 			b.ReportAllocs()
