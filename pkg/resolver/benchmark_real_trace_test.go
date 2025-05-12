@@ -61,21 +61,25 @@ func loadWorkloadsFromJSON(path string) ([]WorkloadProfile, error) {
 	return out, nil
 }
 
-// Dummy instance types for demonstration; replace with your real instance catalog
 func dummyInstanceTypes() []AzureInstanceSpec {
 	return []AzureInstanceSpec{
-		{
-			Name: "Standard_D2_v3", VCpus: 2, MemoryGiB: 8, PricePerHour: 0.1, AvailabilityZones: []string{"1", "2", "3"},
-		},
-		{
-			Name: "Standard_D4_v3", VCpus: 4, MemoryGiB: 16, PricePerHour: 0.2, AvailabilityZones: []string{"1", "2", "3"},
-		},
-		{
-			Name: "Standard_D8_v3", VCpus: 8, MemoryGiB: 32, PricePerHour: 0.4, AvailabilityZones: []string{"1", "2", "3"},
-		},
-		{
-			Name: "Standard_D16_v3", VCpus: 16, MemoryGiB: 64, PricePerHour: 0.8, AvailabilityZones: []string{"1", "2", "3"},
-		},
+		{Name: "Standard_D2_v3", VCpus: 2, MemoryGiB: 8, PricePerHour: 0.1, AvailabilityZones: []string{"1", "2", "3"}},
+		{Name: "Standard_D4_v3", VCpus: 4, MemoryGiB: 16, PricePerHour: 0.2, AvailabilityZones: []string{"1", "2", "3"}},
+		{Name: "Standard_D8_v3", VCpus: 8, MemoryGiB: 32, PricePerHour: 0.4, AvailabilityZones: []string{"1", "2", "3"}},
+		{Name: "Standard_D16_v3", VCpus: 16, MemoryGiB: 64, PricePerHour: 0.8, AvailabilityZones: []string{"1", "2", "3"}},
+		{Name: "Standard_D32_v3", VCpus: 32, MemoryGiB: 128, PricePerHour: 1.6, AvailabilityZones: []string{"1", "2", "3"}},
+		{Name: "Standard_E4s_v3", VCpus: 4, MemoryGiB: 32, PricePerHour: 0.25, AvailabilityZones: []string{"1", "2", "3"}},
+		{Name: "Standard_E8s_v3", VCpus: 8, MemoryGiB: 64, PricePerHour: 0.5, AvailabilityZones: []string{"1", "2", "3"}},
+		{Name: "Standard_E16s_v3", VCpus: 16, MemoryGiB: 128, PricePerHour: 1.0, AvailabilityZones: []string{"1", "2", "3"}},
+		{Name: "Standard_F4s_v2", VCpus: 4, MemoryGiB: 8, PricePerHour: 0.22, AvailabilityZones: []string{"1", "2", "3"}},
+		{Name: "Standard_F8s_v2", VCpus: 8, MemoryGiB: 16, PricePerHour: 0.44, AvailabilityZones: []string{"1", "2", "3"}},
+		{Name: "Standard_F16s_v2", VCpus: 16, MemoryGiB: 32, PricePerHour: 0.88, AvailabilityZones: []string{"1", "2", "3"}},
+		{Name: "Standard_NC6", VCpus: 6, MemoryGiB: 56, GPUCount: 1, GPUType: "K80", PricePerHour: 0.9, AvailabilityZones: []string{"1"}},
+		{Name: "Standard_NC12", VCpus: 12, MemoryGiB: 112, GPUCount: 2, GPUType: "K80", PricePerHour: 1.8, AvailabilityZones: []string{"1"}},
+		{Name: "Standard_NC24", VCpus: 24, MemoryGiB: 224, GPUCount: 4, GPUType: "K80", PricePerHour: 3.6, AvailabilityZones: []string{"1"}},
+		{Name: "Standard_NV6", VCpus: 6, MemoryGiB: 56, GPUCount: 1, GPUType: "M60", PricePerHour: 1.0, AvailabilityZones: []string{"1"}},
+		{Name: "Standard_NV12", VCpus: 12, MemoryGiB: 112, GPUCount: 2, GPUType: "M60", PricePerHour: 2.0, AvailabilityZones: []string{"1"}},
+		{Name: "Standard_NV24", VCpus: 24, MemoryGiB: 224, GPUCount: 4, GPUType: "M60", PricePerHour: 4.0, AvailabilityZones: []string{"1"}},
 	}
 }
 
@@ -116,7 +120,7 @@ func TestPrintBinPackingResult_RealTrace(t *testing.T) {
 	instances := dummyInstanceTypes()
 
 	// Limit the number of workloads for this test to avoid timeouts
-	const maxWorkloads = 10
+	const maxWorkloads = 100
 	if len(workloads) > maxWorkloads {
 		t.Logf("Limiting workloads from %d to %d for test speed", len(workloads), maxWorkloads)
 		workloads = workloads[:maxWorkloads]
