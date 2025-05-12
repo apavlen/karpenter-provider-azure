@@ -83,9 +83,14 @@ def main():
     if all(len(str(col)) > 20 for col in df.columns[:5]):
         log("Detected encoded or incorrect header in vmtable.csv.gz, attempting to reload with header from first row...")
         try:
-            df = pd.read_csv(vmtable_path, compression="gzip", header=1, nrows=args.limit)
+            # Try to read the file with the first row as header (header=0), skip the first row if it is not a header
+            df = pd.read_csv(vmtable_path, compression="gzip", header=0, nrows=args.limit)
+            # If still not matching, try header=1 (second row as header)
+            expected_cols = ["vm_id", "start_time", "end_time", "cpu_avg", "mem_avg", "vcpus", "memory_gib", "workload_type"]
+            if not all(any(exp.lower().replace("_", "") == str(col).lower().replace("_", "") for col in df.columns) for exp in expected_cols):
+                df = pd.read_csv(vmtable_path, compression="gzip", header=1, nrows=args.limit)
         except Exception as e:
-            log(f"ERROR: Failed to reload {vmtable_path} with header from first row: {e}")
+            log(f"ERROR: Failed to reload {vmtable_path} with header from first or second row: {e}")
             sys.exit(1)
 
     col_map = {}
