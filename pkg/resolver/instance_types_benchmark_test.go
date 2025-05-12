@@ -66,7 +66,12 @@ func loadAzureWorkloads(path string) []WorkloadProfile {
 // BenchmarkInstanceSelectionWithRealWorkloads runs the benchmark using real Azure workloads.
 func BenchmarkInstanceSelectionWithRealWorkloads(b *testing.B) {
 	// You may need to adjust the path to your preprocessed data file
-	workloads := loadAzureWorkloads("workloads_preprocessed.json")
+	workloadFile := "workloads_preprocessed.json"
+	if _, err := os.Stat(workloadFile); os.IsNotExist(err) {
+		b.Skipf("Skipping BenchmarkInstanceSelectionWithRealWorkloads: %s not found", workloadFile)
+		return
+	}
+	workloads := loadAzureWorkloads(workloadFile)
 
 	// Generate synthetic instance types (in production, load from Azure API or static list)
 	numInstances := 100
