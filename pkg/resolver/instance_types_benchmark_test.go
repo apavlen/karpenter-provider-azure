@@ -96,9 +96,16 @@ func BenchmarkInstanceSelectionWithRealWorkloads(b *testing.B) {
 	for name, selector := range strategies {
 		b.Run(name, func(b *testing.B) {
 			b.ReportAllocs()
+			selectionCounts := make(map[string]int)
 			for i := 0; i < b.N; i++ {
 				w := workloads[i%len(workloads)]
-				_, _ = selector.Select(candidates, w)
+				best, _ := selector.Select(candidates, w)
+				selectionCounts[best.Name]++
+			}
+			// Output summary after benchmark
+			b.Logf("Strategy: %s, Unique VM types selected: %d", name, len(selectionCounts))
+			for vm, count := range selectionCounts {
+				b.Logf("  VM: %s, selected %d times", vm, count)
 			}
 		})
 	}
