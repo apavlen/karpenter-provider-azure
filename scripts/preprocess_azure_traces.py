@@ -76,37 +76,60 @@ def main():
         log(f"ERROR: Failed to read {vmtable_path}: {e}")
         sys.exit(1)
 
+    # Try to map expected columns to actual columns (case-insensitive, ignore underscores)
     expected_cols = ["vm_id", "start_time", "end_time", "cpu_avg", "mem_avg", "vcpus", "memory_gib", "workload_type"]
-    missing = [col for col in expected_cols if col not in df.columns]
+    col_map = {}
+    for exp in expected_cols:
+        found = None
+        for actual in df.columns:
+            if exp.lower().replace("_", "") == actual.lower().replace("_", ""):
+                found = actual
+                break
+        if not found:
+            # Try substring match
+            for actual in df.columns:
+                if exp.lower().replace("_", "") in actual.lower().replace("_", ""):
+                    found = actual
+                    break
+        col_map[exp] = found
+
+    missing = [k for k, v in col_map.items() if v is None]
     if missing:
         log(f"ERROR: Missing columns in vmtable: {missing}")
         log(f"Columns found: {df.columns.tolist()}")
         sys.exit(1)
 
+    # Rename columns for uniformity
+    df = df.rename(columns={v: k for k, v in col_map.items() if v is not None})
+
     log("Converting vmtable rows to pod-like workload profiles...")
     workloads = []
     for _, row in tqdm(df.iterrows(), total=len(df)):
-        start_ts = convert_time(row["start_time"])
-        end_ts = convert_time(row["end_time"])
-        if start_ts is None or end_ts is None:
-            log(f"Skipping row with invalid start/end time: vm_id={row['vm_id']}")
-            continue
-        workload = {
-            "name": f"workload-{row['vm_id']}",
-            "cpu_request": int(row["vcpus"]),
-            "memory_request_gib": float(row["memory_gib"]),
-            "cpu_usage": float(row["cpu_avg"]),
-            "mem_usage": float(row["mem_avg"]),
-            "start_time": start_ts,
-            "end_time": end_ts,
-            "labels": {
-                "workload_type": str(row["workload_type"]),
-            },
-            "annotations": {
-                "azure_vm_id": str(row["vm_id"]),
+        try:
+            start_ts = convert_time(row["start_time"])
+            end_ts = convert_time(row["end_time"])
+            if start_ts is None or end_ts is None:
+                log(f"Skipping row with invalid start/end time: vm_id={row['vm_id']}")
+                continue
+            workload = {
+                "name": f"workload-{row['vm_id']}",
+                "cpu_request": int(row["vcpus"]),
+                "memory_request_gib": float(row["memory_gib"]),
+                "cpu_usage": float(row["cpu_avg"]),
+                "mem_usage": float(row["mem_avg"]),
+                "start_time": start_ts,
+                "end_time": end_ts,
+                "labels": {
+                    "workload_type": str(row["workload_type"]),
+                },
+                "annotations": {
+                    "azure_vm_id": str(row["vm_id"]),
+                }
             }
-        }
-        workloads.append(workload)
+            workloads.append(workload)
+        except Exception as e:
+            log(f"Skipping row due to error: {e}")
+            continue
 
     log(f"Writing {len(workloads)} workloads to {args.out}")
     try:
