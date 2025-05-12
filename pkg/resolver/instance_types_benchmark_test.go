@@ -26,8 +26,14 @@ The benchmark measures:
     - Selection time (algorithm performance)
     - A/B comparison between strategies
 
-To run:
-    go test -bench . -benchmem ./pkg/resolver
+To run the benchmark with real Azure trace data:
+
+1. Make sure you have preprocessed Azure trace data in the file `workloads_preprocessed.json` in your project root (or adjust the path in BenchmarkInstanceSelectionWithRealWorkloads).
+2. Run the following command to execute the benchmark using the real Azure workloads:
+
+    go test -bench BenchmarkInstanceSelectionWithRealWorkloads -benchmem ./pkg/resolver
+
+This will run only the benchmark that uses the Azure trace data, not the synthetic one.
 
 To visualize results, see the scripts/visualize_benchmark_results.py script.
 */
