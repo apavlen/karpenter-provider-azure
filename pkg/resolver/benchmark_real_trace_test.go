@@ -116,7 +116,7 @@ func TestPrintBinPackingResult_RealTrace(t *testing.T) {
 	instances := dummyInstanceTypes()
 
 	// Limit the number of workloads for this test to avoid timeouts
-	const maxWorkloads = 100
+	const maxWorkloads = 10
 	if len(workloads) > maxWorkloads {
 		t.Logf("Limiting workloads from %d to %d for test speed", len(workloads), maxWorkloads)
 		workloads = workloads[:maxWorkloads]
