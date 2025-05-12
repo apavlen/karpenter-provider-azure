@@ -458,6 +458,7 @@ func BinPackWorkloads(workloads WorkloadSet, candidates []AzureInstanceSpec, str
 		var packed []WorkloadProfile
 		remainingCPU := bestVM.VCpus
 		remainingMem := bestVM.MemoryGiB
+		packedAny := false
 		for i, w := range sorted {
 			if unpacked[i] {
 				continue
@@ -467,7 +468,13 @@ func BinPackWorkloads(workloads WorkloadSet, candidates []AzureInstanceSpec, str
 				remainingCPU -= w.CPURequirements
 				remainingMem -= w.MemoryRequirements
 				unpacked[i] = true
+				packedAny = true
 			}
+		}
+		if !packedAny {
+			// Safety: If we couldn't pack any workload, break to avoid infinite loop
+			fmt.Printf("Warning: Could not pack any workloads onto VM type %s for workload %+v\n", bestVM.Name, workload)
+			break
 		}
 		result.VMs = append(result.VMs, PackedVM{
 			InstanceType: bestVM,
