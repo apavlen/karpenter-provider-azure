@@ -86,11 +86,30 @@ def main():
             # Try to read the file with the first row as header (header=0), skip the first row if it is not a header
             df = pd.read_csv(vmtable_path, compression="gzip", header=0, nrows=args.limit)
             # If still not matching, try header=1 (second row as header)
-            expected_cols = ["vm_id", "start_time", "end_time", "cpu_avg", "mem_avg", "vcpus", "memory_gib", "workload_type"]
             if not all(any(exp.lower().replace("_", "") == str(col).lower().replace("_", "") for col in df.columns) for exp in expected_cols):
                 df = pd.read_csv(vmtable_path, compression="gzip", header=1, nrows=args.limit)
         except Exception as e:
             log(f"ERROR: Failed to reload {vmtable_path} with header from first or second row: {e}")
+            sys.exit(1)
+
+    # Detect if the file is missing a header row (first row is data, not column names)
+    column_names = [
+        "vm_id", "subscription_id", "deployment_id", "start_time", "end_time",
+        "cpu_avg", "mem_avg", "max_mem_avg", "workload_type", "vcpus", "memory_gib"
+    ]
+    # If none of the expected column names are present, assume missing header and reload with names
+    if not any(col in df.columns for col in column_names):
+        log("WARNING: vmtable.csv.gz may be missing a header row. Attempting to reload with provided column names...")
+        try:
+            df = pd.read_csv(
+                vmtable_path,
+                compression="gzip",
+                names=column_names,
+                header=None,
+                nrows=args.limit
+            )
+        except Exception as e:
+            log(f"ERROR: Failed to reload {vmtable_path} with explicit column names: {e}")
             sys.exit(1)
 
     col_map = {}
@@ -112,6 +131,8 @@ def main():
     if missing:
         log(f"ERROR: Missing columns in vmtable: {missing}")
         log(f"Columns found: {df.columns.tolist()}")
+        log("If your vmtable.csv.gz is missing a header row, try re-downloading or manually adding the correct header.")
+        log("The script will attempt to reload with explicit column names if it detects this, but check your file format if errors persist.")
         sys.exit(1)
 
     # Rename columns for uniformity
