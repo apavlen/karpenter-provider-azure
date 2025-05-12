@@ -140,6 +140,8 @@ func randomWorkloadProfile() WorkloadProfile {
 }
 
 func BenchmarkInstanceSelection(b *testing.B) {
+	// This benchmark uses only synthetic (randomly generated) traces, not real Azure data.
+	// The real Azure trace benchmark is BenchmarkInstanceSelectionWithRealWorkloads above.
 	rand.Seed(time.Now().UnixNano())
 	numInstances := 1000
 	numWorkloads := 1000
