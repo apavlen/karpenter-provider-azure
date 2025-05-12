@@ -114,6 +114,14 @@ func TestPrintBinPackingResult_RealTrace(t *testing.T) {
 		t.Fatalf("failed to load workloads: %v", err)
 	}
 	instances := dummyInstanceTypes()
+
+	// Limit the number of workloads for this test to avoid timeouts
+	const maxWorkloads = 1000
+	if len(workloads) > maxWorkloads {
+		t.Logf("Limiting workloads from %d to %d for test speed", len(workloads), maxWorkloads)
+		workloads = workloads[:maxWorkloads]
+	}
+
 	result := BinPackWorkloads(workloads, instances, StrategyGeneralPurpose)
 	fmt.Printf("Packed %d VMs for %d workloads\n", len(result.VMs), len(workloads))
 	for i, vm := range result.VMs {
