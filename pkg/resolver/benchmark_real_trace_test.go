@@ -120,6 +120,8 @@ func TestPrintBinPackingResult_RealTrace(t *testing.T) {
 	if len(workloads) > maxWorkloads {
 		t.Logf("Limiting workloads from %d to %d for test speed", len(workloads), maxWorkloads)
 		workloads = workloads[:maxWorkloads]
+	} else {
+		t.Logf("Test running with %d workloads", len(workloads))
 	}
 
 	result := BinPackWorkloads(workloads, instances, StrategyGeneralPurpose)
@@ -127,4 +129,5 @@ func TestPrintBinPackingResult_RealTrace(t *testing.T) {
 	for i, vm := range result.VMs {
 		fmt.Printf("VM %d: %s, %d workloads\n", i+1, vm.InstanceType.Name, len(vm.Workloads))
 	}
+	t.Logf("Test completed successfully")
 }
