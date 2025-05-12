@@ -200,3 +200,4 @@ func TestPrintBinPackingResult_RealTrace(t *testing.T) {
 		fmt.Printf("Overall Memory Utilization: N/A (totalMemCap=0)\n")
 	}
 	t.Logf("Test completed successfully, packed %d VMs", len(result.VMs))
+}
