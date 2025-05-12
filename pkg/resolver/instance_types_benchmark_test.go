@@ -27,6 +27,16 @@ cpu: Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
 BenchmarkInstanceSelection-8   	     148	   9357721 ns/op	  153163 B/op	      10 allocs/op
 PASS
 ok  	github.com/Azure/karpenter-provider-azure/pkg/resolver	2.208s
+
+Benchmarking with Realistic Traces:
+
+For more realistic benchmarking and profiling, you can use traces from:
+- Kubernetes scheduler logs (real pod resource requests and scheduling events).
+- Public datasets such as the Alibaba Cluster Trace Program (https://github.com/alibaba/clusterdata), Google Borg traces, or Microsoft Azure VM traces.
+- Production cluster pod specs (exported as JSON/YAML).
+
+To use a real trace, parse the trace file and convert each workload event into a WorkloadProfile struct.
+This allows benchmarking the instance selection logic under realistic, production-like load and diversity.
 */
 
 func randomInstanceSpec(i int) AzureInstanceSpec {
