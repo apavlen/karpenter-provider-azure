@@ -74,7 +74,9 @@ func BenchmarkInstanceSelectionWithRealWorkloads(b *testing.B) {
 	// You may need to adjust the path to your preprocessed data file
 	workloadFile := "workloads_preprocessed.json"
 	if _, err := os.Stat(workloadFile); os.IsNotExist(err) {
-		b.Skipf("Skipping BenchmarkInstanceSelectionWithRealWorkloads: %s not found", workloadFile)
+		b.Fatalf("ERROR: BenchmarkInstanceSelectionWithRealWorkloads requires %s but it was not found.\n"+
+			"Please generate this file using the preprocessing script before running the benchmark.\n"+
+			"See scripts/preprocess_azure_traces.py for details.", workloadFile)
 		return
 	}
 	workloads := loadAzureWorkloads(workloadFile)
