@@ -133,7 +133,9 @@ def main():
     args = parser.parse_args()
 
     # Try multiple possible directory layouts for deployments file
+    # Try multiple possible directory layouts for deployments file
     deployments_candidates = [
+        os.path.join(args.indir, "deployments.csv.gz"),
         os.path.join(args.indir, "deployments", "deployments.csv.gz"),
         os.path.join(args.indir, "trace_data", "deployments", "deployments.csv.gz"),
         os.path.join(args.indir, "AzurePublicDataset-master", "trace_data", "deployments", "deployments.csv.gz"),
@@ -153,6 +155,7 @@ def main():
 
     # Try multiple possible directory layouts for usage files
     usage_globs = [
+        os.path.join(args.indir, "vm_cpu_readings-file-*.csv.gz"),
         os.path.join(args.indir, "vm_cpu_readings", "vm_cpu_readings-file-*.csv.gz"),
         os.path.join(args.indir, "trace_data", "vm_cpu_readings", "vm_cpu_readings-file-*.csv.gz"),
         os.path.join(args.indir, "AzurePublicDataset-master", "trace_data", "vm_cpu_readings", "vm_cpu_readings-file-*.csv.gz"),
