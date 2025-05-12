@@ -131,8 +131,30 @@ func TestPrintBinPackingResult_RealTrace(t *testing.T) {
 	t.Logf("Starting BinPackWorkloads with %d workloads and %d instance types", len(workloads), len(instances))
 	result := BinPackWorkloads(workloads, instances, StrategyGeneralPurpose)
 	fmt.Printf("Packed %d VMs for %d workloads\n", len(result.VMs), len(workloads))
+	totalCPUUsed := 0
+	totalMemUsed := 0.0
+	totalCPUCap := 0
+	totalMemCap := 0.0
 	for i, vm := range result.VMs {
 		fmt.Printf("VM %d: %s, %d workloads\n", i+1, vm.InstanceType.Name, len(vm.Workloads))
+		vmCPU := 0
+		vmMem := 0.0
+		for _, w := range vm.Workloads {
+			vmCPU += w.CPURequirements
+			vmMem += w.MemoryRequirements
+		}
+		totalCPUUsed += vmCPU
+		totalMemUsed += vmMem
+		totalCPUCap += vm.InstanceType.VCpus
+		totalMemCap += vm.InstanceType.MemoryGiB
+		fmt.Printf("    Used: %d vCPU / %.1f GiB | Capacity: %d vCPU / %.1f GiB | CPU Util: %.1f%% | Mem Util: %.1f%%\n",
+			vmCPU, vmMem, vm.InstanceType.VCpus, vm.InstanceType.MemoryGiB,
+			100*float64(vmCPU)/float64(vm.InstanceType.VCpus),
+			100*vmMem/vm.InstanceType.MemoryGiB)
 	}
+	fmt.Printf("\nTotal used: %d vCPU / %.1f GiB\n", totalCPUUsed, totalMemUsed)
+	fmt.Printf("Total capacity: %d vCPU / %.1f GiB\n", totalCPUCap, totalMemCap)
+	fmt.Printf("Overall CPU Utilization: %.1f%%\n", 100*float64(totalCPUUsed)/float64(totalCPUCap))
+	fmt.Printf("Overall Memory Utilization: %.1f%%\n", 100*totalMemUsed/totalMemCap)
 	t.Logf("Test completed successfully, packed %d VMs", len(result.VMs))
 }
