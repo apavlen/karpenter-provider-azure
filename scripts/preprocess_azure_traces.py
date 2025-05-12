@@ -52,9 +52,30 @@ def main():
     usage_path = os.path.join(args.indir, "vm_cpu_mem_2020.csv")
 
     print("Loading VM deployments...")
-    deployments = pd.read_csv(deployments_path, usecols=["vm_id", "vm_size", "start_time", "end_time", "resource_group"], nrows=100000)
+    # Read without usecols to inspect columns if needed
+    deployments = pd.read_csv(deployments_path, nrows=100000)
+    print("Deployment columns:", deployments.columns.tolist())
+    # Try to find the correct column names (case-insensitive)
+    expected_cols = ["vm_id", "vm_size", "start_time", "end_time", "resource_group"]
+    actual_cols = [c.lower() for c in deployments.columns]
+    col_map = {col: deployments.columns[actual_cols.index(col)] for col in expected_cols if col in actual_cols}
+    missing = [col for col in expected_cols if col not in actual_cols]
+    if missing:
+        raise ValueError(f"Missing columns in deployments file: {missing}")
+    deployments = deployments[[col_map[c] for c in expected_cols]]
+    deployments.columns = expected_cols
+
     print("Loading VM usage...")
-    usage = pd.read_csv(usage_path, usecols=["vm_id", "timestamp", "cpu_usage", "mem_usage"], nrows=100000)
+    usage = pd.read_csv(usage_path, nrows=100000)
+    print("Usage columns:", usage.columns.tolist())
+    expected_usage_cols = ["vm_id", "timestamp", "cpu_usage", "mem_usage"]
+    actual_usage_cols = [c.lower() for c in usage.columns]
+    usage_col_map = {col: usage.columns[actual_usage_cols.index(col)] for col in expected_usage_cols if col in actual_usage_cols}
+    missing_usage = [col for col in expected_usage_cols if col not in actual_usage_cols]
+    if missing_usage:
+        raise ValueError(f"Missing columns in usage file: {missing_usage}")
+    usage = usage[[usage_col_map[c] for c in expected_usage_cols]]
+    usage.columns = expected_usage_cols
 
     vm_size_map = load_vm_size_map()
 

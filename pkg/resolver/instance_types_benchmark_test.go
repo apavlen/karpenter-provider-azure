@@ -86,7 +86,7 @@ func BenchmarkInstanceSelectionWithRealWorkloads(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
 				w := workloads[i%len(workloads)]
-				_ = selector.Select(candidates, w)
+				_, _ = selector.Select(candidates, w)
 			}
 		})
 	}
