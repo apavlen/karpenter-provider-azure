@@ -189,6 +189,14 @@ func TestPrintBinPackingResult_RealTrace(t *testing.T) {
 	}
 	fmt.Printf("\nTotal used: %d vCPU / %.1f GiB\n", totalCPUUsed, totalMemUsed)
 	fmt.Printf("Total capacity: %d vCPU / %.1f GiB\n", totalCPUCap, totalMemCap)
-	fmt.Printf("Overall CPU Utilization: %.1f%%\n", 100*float64(totalCPUUsed)/float64(totalCPUCap))
-	fmt.Printf("Overall Memory Utilization: %.1f%%\n", 100*totalMemUsed/totalMemCap)
+	if totalCPUCap > 0 {
+		fmt.Printf("Overall CPU Utilization: %.1f%%\n", 100*float64(totalCPUUsed)/float64(totalCPUCap))
+	} else {
+		fmt.Printf("Overall CPU Utilization: N/A (totalCPUCap=0)\n")
+	}
+	if totalMemCap > 0 {
+		fmt.Printf("Overall Memory Utilization: %.1f%%\n", 100*totalMemUsed/totalMemCap)
+	} else {
+		fmt.Printf("Overall Memory Utilization: N/A (totalMemCap=0)\n")
+	}
 	t.Logf("Test completed successfully, packed %d VMs", len(result.VMs))
