@@ -124,10 +124,11 @@ func TestPrintBinPackingResult_RealTrace(t *testing.T) {
 		t.Logf("Test running with %d workloads", len(workloads))
 	}
 
+	t.Logf("Starting BinPackWorkloads with %d workloads and %d instance types", len(workloads), len(instances))
 	result := BinPackWorkloads(workloads, instances, StrategyGeneralPurpose)
 	fmt.Printf("Packed %d VMs for %d workloads\n", len(result.VMs), len(workloads))
 	for i, vm := range result.VMs {
 		fmt.Printf("VM %d: %s, %d workloads\n", i+1, vm.InstanceType.Name, len(vm.Workloads))
 	}
-	t.Logf("Test completed successfully")
+	t.Logf("Test completed successfully, packed %d VMs", len(result.VMs))
 }
