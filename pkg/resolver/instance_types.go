@@ -8,6 +8,22 @@ import (
 /*
 AzureInstanceSpec describes an Azure VM type and its capabilities.
 
+Instance Selection Algorithm: Input and Output
+
+Input:
+- The main input to the instance selection algorithm is a list of candidate Azure VM instance types (`[]AzureInstanceSpec`) and a workload profile (`WorkloadProfile`).
+  - `AzureInstanceSpec` describes the properties and capabilities of each VM type (CPU, memory, GPU, zones, features, etc).
+  - `WorkloadProfile` describes the requirements of the workload to be scheduled (CPU, memory, GPU, zone, and other constraints).
+
+Output:
+- The output is the "best" instance type (`AzureInstanceSpec`) from the candidates that satisfies the workload's requirements and optimizes for cost, fit, and other strategy-specific criteria.
+- If no suitable instance is found, the output is an empty `AzureInstanceSpec` (with Name == "").
+
+How it works:
+- The algorithm filters the candidate instances to only those that meet the workload's constraints (zone, GPU, features, etc).
+- It then scores the filtered instances using a strategy-specific scoring function (e.g., general, CPU, memory, IO intensive).
+- The instance with the highest score is selected as the output.
+
 Comparison to AWS Karpenter Instance Selection Logic:
 
 - This repo's instance selection logic is conceptually similar to AWS Karpenter's:
