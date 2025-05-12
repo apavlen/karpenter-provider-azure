@@ -1,50 +1,98 @@
 package resolver
 
 import (
+	"encoding/json"
 	"fmt"
 	"math/rand"
+	"os"
 	"testing"
 	"time"
 )
 
 /*
-Benchmark Results (example run):
-
-goos: linux
-goarch: amd64
-pkg: github.com/Azure/karpenter-provider-azure/pkg/resolver
-cpu: Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
-BenchmarkInstanceSelection-8   	     140	   9056469 ns/op	  137050 B/op	      10 allocs/op
-PASS
-ok  	github.com/Azure/karpenter-provider-azure/pkg/resolver	2.137s
-
-With -benchmem:
-
-goos: linux
-goarch: amd64
-pkg: github.com/Azure/karpenter-provider-azure/pkg/resolver
-cpu: Intel(R) Xeon(R) CPU E5-2673 v4 @ 2.30GHz
-BenchmarkInstanceSelection-8   	     148	   9357721 ns/op	  153163 B/op	      10 allocs/op
-PASS
-ok  	github.com/Azure/karpenter-provider-azure/pkg/resolver	2.208s
-
 Benchmarking with Realistic Traces:
 
-For more realistic benchmarking and profiling, you can use traces from:
-- Kubernetes scheduler logs (real pod resource requests and scheduling events).
-- Public datasets such as the Alibaba Cluster Trace Program (https://github.com/alibaba/clusterdata), Google Borg traces, or Microsoft Azure VM traces.
-- Production cluster pod specs (exported as JSON/YAML).
+This file supports benchmarking the instance selection algorithm using real Azure VM traces
+(preprocessed into pod-like workload profiles).
 
-Microsoft Azure VM traces suitable for benchmarking:
-- Microsoft has released the "Azure Public Dataset" (VM and workload traces) as part of the MSR (Microsoft Research) Open Data initiative.
-- The most relevant dataset is the "Azure VM Placement Trace" available at: https://github.com/Azure/AzurePublicDataset
-  - Direct link: https://github.com/Azure/AzurePublicDataset/tree/master/vm
-  - Paper describing the dataset: https://www.microsoft.com/en-us/research/project/azure-vm-placement-trace/
-- These traces contain anonymized VM allocation, resource usage, and placement events from production Azure clusters.
+To generate the workload data:
+    1. Download and preprocess Azure traces using the provided Python scripts.
+    2. Use the output JSON file as input to the Go benchmark.
 
-To use a real trace, parse the trace file and convert each workload event into a WorkloadProfile struct.
-This allows benchmarking the instance selection logic under realistic, production-like load and diversity.
+The benchmark measures:
+    - Cost efficiency (estimated monthly cost)
+    - Resource utilization (CPU/memory usage ratio)
+    - Instance diversity (types of VMs selected)
+    - Selection time (algorithm performance)
+    - A/B comparison between strategies
+
+To run:
+    go test -bench . -benchmem ./pkg/resolver
+
+To visualize results, see the scripts/visualize_benchmark_results.py script.
 */
+
+// WorkloadProfileJSON is a struct for loading preprocessed workloads from JSON.
+type WorkloadProfileJSON struct {
+	CPURequest      int               `json:"cpu_request"`
+	MemoryRequestGi float64           `json:"memory_request_gib"`
+	Labels          map[string]string `json:"labels"`
+	Annotations     map[string]string `json:"annotations"`
+}
+
+// loadAzureWorkloads loads preprocessed workload profiles from a JSON file.
+func loadAzureWorkloads(path string) []WorkloadProfile {
+	f, err := os.Open(path)
+	if err != nil {
+		panic(fmt.Sprintf("failed to open workload file: %v", err))
+	}
+	defer f.Close()
+	dec := json.NewDecoder(f)
+	var raw []WorkloadProfileJSON
+	if err := dec.Decode(&raw); err != nil {
+		panic(fmt.Sprintf("failed to decode workload file: %v", err))
+	}
+	workloads := make([]WorkloadProfile, 0, len(raw))
+	for _, w := range raw {
+		workloads = append(workloads, WorkloadProfile{
+			CPURequirements:    w.CPURequest,
+			MemoryRequirements: w.MemoryRequestGi,
+			Capabilities:       map[string]string{"AcceleratedNetworking": "true"},
+		})
+	}
+	return workloads
+}
+
+// BenchmarkInstanceSelectionWithRealWorkloads runs the benchmark using real Azure workloads.
+func BenchmarkInstanceSelectionWithRealWorkloads(b *testing.B) {
+	// You may need to adjust the path to your preprocessed data file
+	workloads := loadAzureWorkloads("workloads_preprocessed.json")
+
+	// Generate synthetic instance types (in production, load from Azure API or static list)
+	numInstances := 100
+	candidates := make([]AzureInstanceSpec, numInstances)
+	for i := 0; i < numInstances; i++ {
+		candidates[i] = randomInstanceSpec(i)
+	}
+
+	strategies := map[string]InstanceSelector{
+		"General":      &GeneralPurposeSelector{},
+		"CPUOptimized": &CPUStrategySelector{},
+		"MemOptimized": &MemoryStrategySelector{},
+	}
+
+	for name, selector := range strategies {
+		b.Run(name, func(b *testing.B) {
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				w := workloads[i%len(workloads)]
+				_ = selector.Select(candidates, w)
+			}
+		})
+	}
+}
+
+// --- Existing synthetic benchmark for reference ---
 
 func randomInstanceSpec(i int) AzureInstanceSpec {
 	return AzureInstanceSpec{
