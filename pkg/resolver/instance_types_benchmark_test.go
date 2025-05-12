@@ -76,7 +76,14 @@ func BenchmarkInstanceSelectionWithRealWorkloads(b *testing.B) {
 	if _, err := os.Stat(workloadFile); os.IsNotExist(err) {
 		b.Fatalf("ERROR: BenchmarkInstanceSelectionWithRealWorkloads requires %s but it was not found.\n"+
 			"Please generate this file using the preprocessing script before running the benchmark.\n"+
-			"See scripts/preprocess_azure_traces.py for details.", workloadFile)
+			"See scripts/preprocess_azure_traces.py for details.\n"+
+			"\n"+
+			"Current status: NO Azure trace is available for benchmarking. The required file %s does not exist.\n"+
+			"To generate it, you must:\n"+
+			"  1. Download the Azure VM traces (see scripts/download_azure_traces.py and its comments for access instructions).\n"+
+			"  2. Preprocess the data using scripts/preprocess_azure_traces.py.\n"+
+			"  3. Ensure the output file is named workloads_preprocessed.json in the project root.\n",
+			workloadFile, workloadFile)
 		return
 	}
 	workloads := loadAzureWorkloads(workloadFile)
