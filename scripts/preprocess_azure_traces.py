@@ -2,16 +2,17 @@
 """
 Preprocess Azure VM deployment and usage traces into Kubernetes pod-like workload profiles.
 
-- Converts VM sizes to CPU/memory requests
-- Creates synthetic pod specifications
-- Preserves temporal patterns from the original data
-- Generates labels/annotations for testing constraints
+- Automatically downloads Azure trace files if not present
+- Converts VM sizes to CPU/memory requests (with comprehensive mapping)
+- Handles large files efficiently (streaming, chunking, and optional row limit for debugging)
+- Flexible column name detection
+- Robust error handling and logging
 
 Usage:
-    python scripts/preprocess_azure_traces.py --indir data/azure_traces --out workloads_preprocessed.json
+    python scripts/preprocess_azure_traces.py --indir data/azure_traces --out workloads_preprocessed.json [--limit 100000]
 
 Requirements:
-    pip install pandas tqdm
+    pip install pandas tqdm requests
 
 Input files:
     - vm_deployments_aggregate_2020.csv
@@ -26,17 +27,98 @@ import argparse
 import pandas as pd
 import json
 from tqdm import tqdm
+import requests
+import sys
 
-# Example mapping from Azure VM size to CPU/memory (can be extended)
+# Azure Public Dataset URLs (2020)
+VM_DEPLOYMENTS_URL = "https://azurepublicdatasetv2.blob.core.windows.net/azurepublicdatasetv2/azurepublicdataset/vm_deployments_aggregate_2020.csv"
+VM_USAGE_URL = "https://azurepublicdatasetv2.blob.core.windows.net/azurepublicdatasetv2/azurepublicdataset/vm_cpu_mem_2020.csv"
+
+# Comprehensive mapping from Azure VM size to (vCPUs, MemoryGiB)
 AZURE_VM_SIZE_MAP = {
-    # VMSize: (vCPUs, MemoryGiB)
-    "Standard_D2_v3": (2, 8),
-    "Standard_D4_v3": (4, 16),
-    "Standard_D8_v3": (8, 32),
-    "Standard_D16_v3": (16, 64),
-    "Standard_D32_v3": (32, 128),
-    # Add more as needed
+    # Dv3
+    "Standard_D2_v3": (2, 8), "Standard_D4_v3": (4, 16), "Standard_D8_v3": (8, 32),
+    "Standard_D16_v3": (16, 64), "Standard_D32_v3": (32, 128), "Standard_D64_v3": (64, 256),
+    # Dsv3
+    "Standard_D2s_v3": (2, 8), "Standard_D4s_v3": (4, 16), "Standard_D8s_v3": (8, 32),
+    "Standard_D16s_v3": (16, 64), "Standard_D32s_v3": (32, 128), "Standard_D64s_v3": (64, 256),
+    # Ev3
+    "Standard_E2_v3": (2, 16), "Standard_E4_v3": (4, 32), "Standard_E8_v3": (8, 64),
+    "Standard_E16_v3": (16, 128), "Standard_E32_v3": (32, 256), "Standard_E64_v3": (64, 432),
+    # Esv3
+    "Standard_E2s_v3": (2, 16), "Standard_E4s_v3": (4, 32), "Standard_E8s_v3": (8, 64),
+    "Standard_E16s_v3": (16, 128), "Standard_E32s_v3": (32, 256), "Standard_E64s_v3": (64, 432),
+    # Fsv2
+    "Standard_F2s_v2": (2, 4), "Standard_F4s_v2": (4, 8), "Standard_F8s_v2": (8, 16),
+    "Standard_F16s_v2": (16, 32), "Standard_F32s_v2": (32, 64), "Standard_F64s_v2": (64, 128), "Standard_F72s_v2": (72, 144),
+    # B-series
+    "Standard_B1s": (1, 1), "Standard_B2s": (2, 4), "Standard_B1ms": (1, 2), "Standard_B2ms": (2, 8),
+    "Standard_B4ms": (4, 16), "Standard_B8ms": (8, 32),
+    # A-series
+    "Standard_A1_v2": (1, 2), "Standard_A2_v2": (2, 4), "Standard_A4_v2": (4, 8), "Standard_A8_v2": (8, 16),
+    # Add more as needed for your dataset
 }
+
+def log(msg):
+    print(f"[preprocess] {msg}", file=sys.stderr)
+
+def download_file(url, out_path, chunk_size=1024*1024):
+    log(f"Downloading {url} to {out_path}")
+    try:
+        with requests.get(url, stream=True, timeout=60) as r:
+            r.raise_for_status()
+            total = int(r.headers.get('content-length', 0))
+            with open(out_path, 'wb') as f, tqdm(
+                desc=f"Downloading {os.path.basename(out_path)}",
+                total=total, unit='B', unit_scale=True
+            ) as bar:
+                for chunk in r.iter_content(chunk_size=chunk_size):
+                    if chunk:
+                        f.write(chunk)
+                        bar.update(len(chunk))
+        # Check for XML error
+        with open(out_path, "r", encoding="utf-8", errors="replace") as f:
+            first_line = f.readline()
+            if first_line.startswith("<?xml"):
+                log(f"ERROR: {out_path} appears to be an XML error file, not a CSV.")
+                log("Please check the AzurePublicDataset repo for updated links or access instructions.")
+                raise RuntimeError(f"Downloaded file {out_path} is not a valid CSV.")
+    except Exception as e:
+        log(f"Failed to download {url}: {e}")
+        raise
+
+def ensure_file(path, url):
+    if not os.path.exists(path):
+        log(f"{path} not found, downloading from {url}")
+        download_file(url, path)
+    else:
+        log(f"File already exists: {path}")
+
+def detect_column(df, expected_names):
+    """
+    Find the best matching column in df for each expected name (case-insensitive, underscore/space/strip).
+    Returns a dict: expected_name -> actual_column_name
+    """
+    actual = [c.lower().replace("_", "").replace(" ", "") for c in df.columns]
+    mapping = {}
+    for exp in expected_names:
+        exp_norm = exp.lower().replace("_", "").replace(" ", "")
+        found = None
+        for i, act in enumerate(actual):
+            if act == exp_norm:
+                found = df.columns[i]
+                break
+        if not found:
+            # Try substring match
+            for i, act in enumerate(actual):
+                if exp_norm in act:
+                    found = df.columns[i]
+                    break
+        if found:
+            mapping[exp] = found
+        else:
+            mapping[exp] = None
+    return mapping
 
 def load_vm_size_map():
     # In production, load a full mapping from Azure docs or API
@@ -46,54 +128,74 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--indir', type=str, default='data/azure_traces', help='Input directory')
     parser.add_argument('--out', type=str, default='workloads_preprocessed.json', help='Output file')
+    parser.add_argument('--limit', type=int, default=None, help='Limit number of rows (for debugging)')
     args = parser.parse_args()
+
+    os.makedirs(args.indir, exist_ok=True)
 
     deployments_path = os.path.join(args.indir, "vm_deployments_aggregate_2020.csv")
     usage_path = os.path.join(args.indir, "vm_cpu_mem_2020.csv")
 
-    print("Loading VM deployments...")
-    # Read without usecols to inspect columns if needed
-    deployments = pd.read_csv(deployments_path, nrows=100000)
-    print("Deployment columns:", deployments.columns.tolist())
-    # Check for XML error (AzurePublicDataset sometimes returns XML error if file not found)
-    if len(deployments.columns) == 1 and deployments.columns[0].startswith("<?xml"):
-        print("ERROR: The deployments CSV file does not contain valid data. It may be an error XML.")
-        print("File content preview:", deployments.columns[0][:200])
-        print("Please check that the file was downloaded correctly and the URL is valid.")
-        exit(1)
-    # Try to find the correct column names (case-insensitive)
-    expected_cols = ["vm_id", "vm_size", "start_time", "end_time", "resource_group"]
-    actual_cols = [c.lower() for c in deployments.columns]
-    col_map = {col: deployments.columns[actual_cols.index(col)] for col in expected_cols if col in actual_cols}
-    missing = [col for col in expected_cols if col not in actual_cols]
-    if missing:
-        raise ValueError(f"Missing columns in deployments file: {missing}")
-    deployments = deployments[[col_map[c] for c in expected_cols]]
-    deployments.columns = expected_cols
+    # Download files if missing
+    ensure_file(deployments_path, VM_DEPLOYMENTS_URL)
+    ensure_file(usage_path, VM_USAGE_URL)
 
-    print("Loading VM usage...")
-    usage = pd.read_csv(usage_path, nrows=100000)
-    print("Usage columns:", usage.columns.tolist())
+    # Load deployments
+    log("Loading VM deployments...")
+    deployments = pd.read_csv(deployments_path, nrows=args.limit)
+    log(f"Deployment columns: {deployments.columns.tolist()}")
+    if len(deployments.columns) == 1 and deployments.columns[0].startswith("<?xml"):
+        log("ERROR: The deployments CSV file does not contain valid data. It may be an error XML.")
+        log(f"File content preview: {deployments.columns[0][:200]}")
+        log("Please check that the file was downloaded correctly and the URL is valid.")
+        sys.exit(1)
+    expected_deploy_cols = ["vm_id", "vm_size", "start_time", "end_time", "resource_group"]
+    deploy_col_map = detect_column(deployments, expected_deploy_cols)
+    missing = [k for k, v in deploy_col_map.items() if v is None]
+    if missing:
+        log(f"Missing columns in deployments file: {missing}")
+        sys.exit(1)
+    deployments = deployments[[deploy_col_map[c] for c in expected_deploy_cols]]
+    deployments.columns = expected_deploy_cols
+
+    # Load usage
+    log("Loading VM usage...")
+    usage = pd.read_csv(usage_path, nrows=args.limit)
+    log(f"Usage columns: {usage.columns.tolist()}")
     expected_usage_cols = ["vm_id", "timestamp", "cpu_usage", "mem_usage"]
-    actual_usage_cols = [c.lower() for c in usage.columns]
-    usage_col_map = {col: usage.columns[actual_usage_cols.index(col)] for col in expected_usage_cols if col in actual_usage_cols}
-    missing_usage = [col for col in expected_usage_cols if col not in actual_usage_cols]
+    usage_col_map = detect_column(usage, expected_usage_cols)
+    missing_usage = [k for k, v in usage_col_map.items() if v is None]
     if missing_usage:
-        raise ValueError(f"Missing columns in usage file: {missing_usage}")
+        log(f"Missing columns in usage file: {missing_usage}")
+        sys.exit(1)
     usage = usage[[usage_col_map[c] for c in expected_usage_cols]]
     usage.columns = expected_usage_cols
 
     vm_size_map = load_vm_size_map()
 
     # Merge deployments and usage on vm_id
+    log("Merging deployments and usage data...")
     merged = pd.merge(usage, deployments, on="vm_id", how="inner")
 
     # Convert to pod-like workload profiles
+    log("Converting merged data to pod-like workload profiles...")
     workloads = []
     for _, row in tqdm(merged.iterrows(), total=len(merged)):
         vm_size = row["vm_size"]
         vcpus, mem_gib = vm_size_map.get(vm_size, (None, None))
         if vcpus is None:
+            # Try to parse vCPU/mem from VM size string (e.g., Standard_D4_v3 -> 4 vCPUs, 16 GiB)
+            import re
+            m = re.match(r"Standard_[A-Z]+(\d+)[a-z_]*_v\d+", vm_size)
+            if m:
+                try:
+                    vcpus = int(m.group(1))
+                    # Heuristic: 1 vCPU = 4 GiB (for D-series), fallback if not mapped
+                    mem_gib = vcpus * 4
+                except Exception:
+                    vcpus, mem_gib = None, None
+        if vcpus is None:
+            log(f"Skipping unknown VM size: {vm_size}")
             continue  # skip unknown sizes
 
         # Synthesize a pod spec
@@ -115,7 +217,7 @@ def main():
         }
         workloads.append(workload)
 
-    print(f"Writing {len(workloads)} workloads to {args.out}")
+    log(f"Writing {len(workloads)} workloads to {args.out}")
     with open(args.out, "w") as f:
         json.dump(workloads, f, indent=2)
 
