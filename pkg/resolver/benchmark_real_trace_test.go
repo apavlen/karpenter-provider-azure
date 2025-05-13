@@ -157,8 +157,7 @@ func BenchmarkBinPacking_RealTrace(b *testing.B) {
 	}
 }
 
-// Optionally, a test to print packing results for inspection
-func TestPrintBinPackingResult_RealTrace(t *testing.T) {
+func TestPackingEfficiencyAndCostReport_RealTrace(t *testing.T) {
 	workloads, err := loadWorkloadsFromJSON("workloads_preprocessed.json")
 	if err != nil {
 		t.Fatalf("failed to load workloads: %v", err)
@@ -181,8 +180,10 @@ func TestPrintBinPackingResult_RealTrace(t *testing.T) {
 	totalMemUsed := 0.0
 	totalCPUCap := 0
 	totalMemCap := 0.0
-	for i, vm := range result.VMs {
-		fmt.Printf("VM %d: %s, %d workloads\n", i+1, vm.InstanceType.Name, len(vm.Workloads))
+	totalCost := 0.0
+
+	fmt.Printf("\n%-20s %-10s %-10s %-10s %-10s %-10s %-10s %-10s\n", "VM Type", "vCPU Used", "vCPU Cap", "Mem Used", "Mem Cap", "CPU Util", "Mem Util", "Cost/hr")
+	for _, vm := range result.VMs {
 		vmCPU := 0
 		vmMem := 0.0
 		for _, w := range vm.Workloads {
@@ -193,10 +194,11 @@ func TestPrintBinPackingResult_RealTrace(t *testing.T) {
 		totalMemUsed += vmMem
 		totalCPUCap += vm.InstanceType.VCpus
 		totalMemCap += vm.InstanceType.MemoryGiB
-		fmt.Printf("    Used: %d vCPU / %.1f GiB | Capacity: %d vCPU / %.1f GiB | CPU Util: %.1f%% | Mem Util: %.1f%%\n",
-			vmCPU, vmMem, vm.InstanceType.VCpus, vm.InstanceType.MemoryGiB,
-			100*float64(vmCPU)/float64(vm.InstanceType.VCpus),
-			100*vmMem/vm.InstanceType.MemoryGiB)
+		totalCost += vm.InstanceType.PricePerHour
+		cpuUtil := 100 * float64(vmCPU) / float64(vm.InstanceType.VCpus)
+		memUtil := 100 * vmMem / vm.InstanceType.MemoryGiB
+		fmt.Printf("%-20s %-10d %-10d %-10.1f %-10.1f %-10.1f %-10.1f $%-9.2f\n",
+			vm.InstanceType.Name, vmCPU, vm.InstanceType.VCpus, vmMem, vm.InstanceType.MemoryGiB, cpuUtil, memUtil, vm.InstanceType.PricePerHour)
 	}
 	fmt.Printf("\nTotal used: %d vCPU / %.1f GiB\n", totalCPUUsed, totalMemUsed)
 	fmt.Printf("Total capacity: %d vCPU / %.1f GiB\n", totalCPUCap, totalMemCap)
@@ -209,6 +211,13 @@ func TestPrintBinPackingResult_RealTrace(t *testing.T) {
 		fmt.Printf("Overall Memory Utilization: %.1f%%\n", 100*totalMemUsed/totalMemCap)
 	} else {
 		fmt.Printf("Overall Memory Utilization: N/A (totalMemCap=0)\n")
+	}
+	fmt.Printf("Total hourly cost: $%.2f\n", totalCost)
+	if len(result.VMs) > 0 {
+		fmt.Printf("Average cost per VM: $%.2f/hr\n", totalCost/float64(len(result.VMs)))
+	}
+	if len(workloads) > 0 {
+		fmt.Printf("Average cost per workload: $%.4f/hr\n", totalCost/float64(len(workloads)))
 	}
 	t.Logf("Test completed successfully, packed %d VMs", len(result.VMs))
 }
