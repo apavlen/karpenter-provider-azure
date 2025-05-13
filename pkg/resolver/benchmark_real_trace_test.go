@@ -6,16 +6,17 @@ import (
 	"path/filepath"
 	"testing"
 	"fmt"
-
-	// Import types from the same package
 )
 
 /*
-Import the types needed for this test file from instance_types.go.
-Since this test file is in the same package ("resolver"), the types
-WorkloadProfile, AzureInstanceSpec, WorkloadSet, SelectionStrategy, PackingResult,
-and the functions SelectBestInstance, BinPackWorkloads, selectWithStrategy, etc.
-are available without import.
+NOTE: If you see "undefined: WorkloadProfile" or similar errors,
+make sure that instance_types.go is in the same package ("resolver")
+and that your build/test command includes both files, e.g.:
+
+    go test -bench=Benchmark -benchmem ./pkg/resolver
+
+Running `go test` on a single file (e.g., ..._test.go) will not include
+other non-test files in the package. Always run tests at the package level.
 */
 
 // WorkloadJSON is the struct for loading workloads_preprocessed.json
