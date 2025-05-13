@@ -32,8 +32,11 @@ type WorkloadJSON struct {
 	Annotations       map[string]string  `json:"annotations"`
 }
 
-// Helper to load workloads_preprocessed.json and convert to []WorkloadProfile
-func loadWorkloadsFromJSON(path string) ([]WorkloadProfile, error) {
+/*
+Helper to load workloads_preprocessed.json and convert to []WorkloadProfile.
+If limit > 0, returns at most limit workloads. If limit == 0, returns all.
+*/
+func loadWorkloadsFromJSONWithLimit(path string, limit int) ([]WorkloadProfile, error) {
 	// Try the provided path first
 	f, err := os.Open(path)
 	if err != nil {
@@ -59,7 +62,11 @@ func loadWorkloadsFromJSON(path string) ([]WorkloadProfile, error) {
 		return nil, err
 	}
 	var out []WorkloadProfile
+	count := 0
 	for _, w := range raw {
+		if limit > 0 && count >= limit {
+			break
+		}
 		out = append(out, WorkloadProfile{
 			CPURequirements:    w.CPURequest,
 			MemoryRequirements: w.MemoryRequestGiB,
@@ -68,8 +75,14 @@ func loadWorkloadsFromJSON(path string) ([]WorkloadProfile, error) {
 				"workload_type": w.Labels["workload_type"],
 			},
 		})
+		count++
 	}
 	return out, nil
+}
+
+// Backward-compatible: original function loads all workloads
+func loadWorkloadsFromJSON(path string) ([]WorkloadProfile, error) {
+	return loadWorkloadsFromJSONWithLimit(path, 0)
 }
 
 func dummyInstanceTypes() []AzureInstanceSpec {
@@ -95,8 +108,16 @@ func dummyInstanceTypes() []AzureInstanceSpec {
 }
 
 // Benchmark instance selection for each workload in the trace
+// Optionally limit the number of workloads by setting the WORKLOAD_LIMIT environment variable.
 func BenchmarkInstanceSelection_RealTrace(b *testing.B) {
-	workloads, err := loadWorkloadsFromJSON("workloads_preprocessed.json")
+	limit := 0
+	if v := os.Getenv("WORKLOAD_LIMIT"); v != "" {
+		fmt.Sscanf(v, "%d", &limit)
+		if limit > 0 {
+			b.Logf("Limiting workloads to %d (via WORKLOAD_LIMIT)", limit)
+		}
+	}
+	workloads, err := loadWorkloadsFromJSONWithLimit("workloads_preprocessed.json", limit)
 	if err != nil {
 		b.Fatalf("failed to load workloads: %v", err)
 	}
@@ -132,8 +153,16 @@ func BinPackWorkloadsNaiveAlgo(workloads WorkloadSet, candidates []AzureInstance
 }
 
 // Benchmark bin-packing for the full trace, comparing algorithms
+// Optionally limit the number of workloads by setting the WORKLOAD_LIMIT environment variable.
 func BenchmarkBinPacking_RealTrace(b *testing.B) {
-	workloads, err := loadWorkloadsFromJSON("workloads_preprocessed.json")
+	limit := 0
+	if v := os.Getenv("WORKLOAD_LIMIT"); v != "" {
+		fmt.Sscanf(v, "%d", &limit)
+		if limit > 0 {
+			b.Logf("Limiting workloads to %d (via WORKLOAD_LIMIT)", limit)
+		}
+	}
+	workloads, err := loadWorkloadsFromJSONWithLimit("workloads_preprocessed.json", limit)
 	if err != nil {
 		b.Fatalf("failed to load workloads: %v", err)
 	}
@@ -158,21 +187,20 @@ func BenchmarkBinPacking_RealTrace(b *testing.B) {
 }
 
 func TestPackingEfficiencyAndCostReport_RealTrace(t *testing.T) {
-	workloads, err := loadWorkloadsFromJSON("workloads_preprocessed.json")
+	limit := 0
+	if v := os.Getenv("WORKLOAD_LIMIT"); v != "" {
+		fmt.Sscanf(v, "%d", &limit)
+		if limit > 0 {
+			t.Logf("Limiting workloads to %d (via WORKLOAD_LIMIT)", limit)
+		}
+	}
+	workloads, err := loadWorkloadsFromJSONWithLimit("workloads_preprocessed.json", limit)
 	if err != nil {
 		t.Fatalf("failed to load workloads: %v", err)
 	}
 	instances := dummyInstanceTypes()
 
-	// Limit the number of workloads for this test to avoid timeouts
-	const maxWorkloads = 100
-	if len(workloads) > maxWorkloads {
-		t.Logf("Limiting workloads from %d to %d for test speed", len(workloads), maxWorkloads)
-		workloads = workloads[:maxWorkloads]
-	} else {
-		t.Logf("Test running with %d workloads", len(workloads))
-	}
-
+	t.Logf("Test running with %d workloads", len(workloads))
 	t.Logf("Starting BinPackWorkloads with %d workloads and %d instance types", len(workloads), len(instances))
 	result := BinPackWorkloads(workloads, instances, StrategyGeneralPurpose)
 	fmt.Printf("Packed %d VMs for %d workloads\n", len(result.VMs), len(workloads))
